@@ -457,108 +457,15 @@ async function createBackup() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Backing up...</span>';
 
-  try {
-    showToast('Collecting all files...', 'info', 3000);
+  // Instantiate the manager and pipe progress events directly into your showToast system
+  const backupManager = new SupabaseBackupManager(supabaseClient, currentBucket, (message, type) => {
+    showToast(message, type, type === 'warning' ? 2500 : 3500);
+  });
 
-    const allFiles = await listAllFilesRecursive('');
+  await backupManager.runBackup();
 
-    if (allFiles.length === 0) {
-      showToast('Bucket is empty – nothing to backup', 'warning');
-      return;
-    }
-
-    showToast(`Found ${allFiles.length} file(s). Downloading fresh copies...`, 'info', 4000);
-
-    const zip = new JSZip();
-    const hashParts = [];
-
-    let processed = 0;
-    for (const filePath of allFiles) {
-      try {
-        // Create a short-lived signed URL
-        const { data: signed, error: signErr } = await supabaseClient
-          .storage
-          .from(currentBucket)
-          .createSignedUrl(filePath, 60);
-
-        if (signErr) throw signErr;
-
-        // Force no-cache fetch so we always get the latest version
-        const res = await fetch(signed.signedUrl, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const arrayBuffer = await res.arrayBuffer();
-        zip.file(filePath, arrayBuffer);
-
-        hashParts.push({
-          path: filePath,
-          buffer: arrayBuffer
-        });
-      } catch (err) {
-        console.error('Failed to download', filePath, err);
-        showToast(`Skipped ${filePath}`, 'warning', 2000);
-      }
-
-      processed++;
-      if (processed % 5 === 0 || processed === allFiles.length) {
-        showToast(`Downloaded ${processed} / ${allFiles.length}`, 'info', 1200);
-      }
-    }
-
-    // Deterministic hash of path + binary content
-    hashParts.sort((a, b) => a.path.localeCompare(b.path));
-
-    const encoder = new TextEncoder();
-    const chunks = [];
-    let totalLength = 0;
-
-    for (const part of hashParts) {
-      const pathBytes = encoder.encode(part.path);
-      const contentBytes = new Uint8Array(part.buffer);
-
-      chunks.push(pathBytes);
-      chunks.push(new Uint8Array([0]));
-      chunks.push(contentBytes);
-
-      totalLength += pathBytes.length + 1 + contentBytes.length;
-    }
-
-    const combined = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      combined.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    const hashBuffer = await crypto.subtle.digest('SHA-256', combined);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const fullHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    const shortHash = fullHash.slice(0, 16);
-
-    const today = new Date().toISOString().slice(0, 10);
-    const zipName = `${currentBucket}_${today}_${shortHash}.zip`;
-
-    showToast('Creating ZIP...', 'info', 2000);
-    const blob = await zip.generateAsync({
-      type: 'blob',
-      compression: 'DEFLATE',
-      compressionOptions: { level: 6 }
-    });
-
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = zipName;
-    a.click();
-    URL.revokeObjectURL(a.href);
-
-    showToast(`Backup ready: ${zipName}`, 'success', 6000);
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || 'Backup failed', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-box-archive"></i> <span>Backup</span>';
-  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-box-archive"></i> <span>Backup</span>';
 }
 
 async function listAllFilesRecursive(prefix = '') {

@@ -61,7 +61,7 @@ function initSupabase(url, key, bucket) {
   }
 }
 
-// ---------- List files ----------
+// ---------- List files & compute file hashes ----------
 async function listFiles() {
   if (!supabaseClient) return;
 
@@ -87,17 +87,30 @@ async function listFiles() {
       const fullPath = currentPath ? `${currentPath}/${item.name}` : item.name;
       item.fullPath = fullPath;
 
-      if (isImage(item.name) || isVideo(item.name)) {
-        try {
-          const { data: signed, error: signErr } = await supabaseClient
-            .storage
-            .from(currentBucket)
-            .createSignedUrl(fullPath, 3600);
+      // Compute SHA-256 hash of path/filename + binary content hash
+      try {
+        const encoder = new TextEncoder();
+        const pathHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(fullPath));
+        item.pathHash = Array.from(new Uint8Array(pathHashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 
-          if (!signErr && signed?.signedUrl) {
-            item.thumbUrl = signed.signedUrl;
+        const { data: signed, error: signErr } = await supabaseClient
+          .storage
+          .from(currentBucket)
+          .createSignedUrl(fullPath, 3600);
+
+        if (!signErr && signed?.signedUrl) {
+          item.thumbUrl = signed.signedUrl;
+
+          // Fetch binary data to compute content hash
+          const res = await fetch(signed.signedUrl, { cache: 'no-store' });
+          if (res.ok) {
+            const buffer = await res.arrayBuffer();
+            const contentHashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            item.contentHash = Array.from(new Uint8Array(contentHashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
           }
-        } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('Failed to compute hashes for', fullPath, e);
       }
     }));
 
@@ -162,16 +175,19 @@ function renderView() {
       ? `navigateToFolder('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')`
       : `openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')`;
 
+    // Tooltip showing path hash and content hash on hover for files
+    const tooltipAttr = isFolder ? '' : `title="Path SHA-256: ${item.pathHash || 'N/A'}\nContent SHA-256: ${item.contentHash || 'N/A'}"`;
+
     row.innerHTML = `
-      <td class="py-2.5 px-4">
+      <td class="py-2.5 px-4" ${tooltipAttr}>
         <div class="flex items-center gap-3 cursor-pointer" onclick="${clickAction}">
           ${mediaPreview}
           <span class="font-medium hover:text-indigo-600 truncate max-w-xs">${escapeHtml(item.name)}</span>
         </div>
       </td>
-      <td class="py-2.5 px-4 text-slate-500">${isFolder ? 'Folder' : getExtension(item.name)}</td>
-      <td class="py-2.5 px-4 text-slate-500 font-mono">${sizeStr}</td>
-      <td class="py-2.5 px-4 text-slate-500 font-mono">${updated}</td>
+      <td class="py-2.5 px-4 text-slate-500" ${tooltipAttr}>${isFolder ? 'Folder' : getExtension(item.name)}</td>
+      <td class="py-2.5 px-4 text-slate-500 font-mono" ${tooltipAttr}>${sizeStr}</td>
+      <td class="py-2.5 px-4 text-slate-500 font-mono" ${tooltipAttr}>${updated}</td>
       <td class="py-2.5 px-4 text-right space-x-1">
         ${!isFolder ? `
           <button onclick="openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Open" class="p-1.5 hover:text-indigo-600 rounded hover:bg-slate-100">
@@ -446,7 +462,144 @@ async function downloadFile(path, name) {
   }
 }
 
-// ---------- Backup (fresh downloads + content hash) ----------
+// ---------- Backup Class Integration ----------
+class SupabaseBackupManager {
+  constructor(supabaseClient, bucketName, onProgress = null) {
+    if (!supabaseClient) throw new Error('Supabase client is required for backup.');
+    this.supabase = supabaseClient;
+    this.bucket = bucketName;
+    this.onProgress = onProgress || ((msg) => console.log(msg));
+  }
+
+  async runBackup() {
+    try {
+      this.onProgress('Collecting all files...', 'info');
+      const allFiles = await this._listAllFilesRecursive('');
+
+      if (allFiles.length === 0) {
+        this.onProgress('Bucket is empty – nothing to backup', 'warning');
+        return { success: false, error: 'Bucket is empty' };
+      }
+
+      this.onProgress(`Found ${allFiles.length} file(s). Downloading fresh copies...`, 'info');
+
+      const zip = new JSZip();
+      const hashParts = [];
+      let processed = 0;
+
+      for (const filePath of allFiles) {
+        try {
+          const { data: signed, error: signErr } = await this.supabase
+            .storage
+            .from(this.bucket)
+            .createSignedUrl(filePath, 60);
+
+          if (signErr) throw signErr;
+
+          const res = await fetch(signed.signedUrl, { cache: 'no-store' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+          const arrayBuffer = await res.arrayBuffer();
+          zip.file(filePath, arrayBuffer);
+
+          hashParts.push({ path: filePath, buffer: arrayBuffer });
+        } catch (err) {
+          console.warn(`Failed to download ${filePath}:`, err);
+          this.onProgress(`Skipped ${filePath}`, 'warning');
+        }
+
+        processed++;
+        if (processed % 5 === 0 || processed === allFiles.length) {
+          this.onProgress(`Downloaded ${processed} / ${allFiles.length}`, 'info');
+        }
+      }
+
+      this.onProgress('Calculating archive hash...', 'info');
+      const shortHash = await this._computeHash(hashParts);
+
+      const today = new Date().toISOString().slice(0, 10);
+      const zipName = `${this.bucket}_${today}_${shortHash}.zip`;
+
+      this.onProgress('Compressing into ZIP archive...', 'info');
+      const blob = await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+
+      this._triggerDownload(blob, zipName);
+
+      this.onProgress(`Backup ready: ${zipName}`, 'success');
+      return { success: true, filename: zipName };
+    } catch (err) {
+      console.error('Backup failed:', err);
+      this.onProgress(err.message || 'Backup failed', 'error');
+      return { success: false, error: err.message };
+    }
+  }
+
+  async _listAllFilesRecursive(prefix = '') {
+    const results = [];
+    const { data, error } = await this.supabase
+      .storage
+      .from(this.bucket)
+      .list(prefix, { limit: 1000, offset: 0 });
+
+    if (error) throw error;
+
+    for (const item of (data || [])) {
+      if (item.name === '.emptyFolderPlaceholder') continue;
+      const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
+
+      if (!item.id) {
+        const subFiles = await this._listAllFilesRecursive(fullPath);
+        results.push(...subFiles);
+      } else {
+        results.push(fullPath);
+      }
+    }
+    return results;
+  }
+
+  async _computeHash(hashParts) {
+    hashParts.sort((a, b) => a.path.localeCompare(b.path));
+
+    const encoder = new TextEncoder();
+    const chunks = [];
+    let totalLength = 0;
+
+    for (const part of hashParts) {
+      const pathBytes = encoder.encode(part.path);
+      const contentBytes = new Uint8Array(part.buffer);
+
+      chunks.push(pathBytes);
+      chunks.push(new Uint8Array([0]));
+      chunks.push(contentBytes);
+
+      totalLength += pathBytes.length + 1 + contentBytes.length;
+    }
+
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const hashBuffer = await crypto.subtle.digest('SHA-256', combined);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+  }
+
+  _triggerDownload(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+}
+
 async function createBackup() {
   if (!supabaseClient) {
     showToast('Not connected', 'warning');
@@ -457,7 +610,6 @@ async function createBackup() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Backing up...</span>';
 
-  // Instantiate the manager and pipe progress events directly into your showToast system
   const backupManager = new SupabaseBackupManager(supabaseClient, currentBucket, (message, type) => {
     showToast(message, type, type === 'warning' ? 2500 : 3500);
   });
@@ -466,30 +618,6 @@ async function createBackup() {
 
   btn.disabled = false;
   btn.innerHTML = '<i class="fa-solid fa-box-archive"></i> <span>Backup</span>';
-}
-
-async function listAllFilesRecursive(prefix = '') {
-  const results = [];
-  const { data, error } = await supabaseClient
-    .storage
-    .from(currentBucket)
-    .list(prefix, { limit: 1000, offset: 0 });
-
-  if (error) throw error;
-
-  for (const item of (data || [])) {
-    if (item.name === '.emptyFolderPlaceholder') continue;
-
-    const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
-
-    if (!item.id) {
-      const subFiles = await listAllFilesRecursive(fullPath);
-      results.push(...subFiles);
-    } else {
-      results.push(fullPath);
-    }
-  }
-  return results;
 }
 
 // ---------- Delete ----------

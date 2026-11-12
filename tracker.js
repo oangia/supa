@@ -1,48 +1,19 @@
 class DailyTaskTracker {
-  constructor(
-    tasks = {
-      Basic: [
-        { name: 'Exercises', objective: 'healthy' }, 
-        { name: 'Reading', type: 'weekly', desc: 'Read at least 1 chapter of a book', objective: 'useful' }, 
-        { name: 'Learn an expression', objective: 'useful' }, 
-        { name: 'Diet', disabled: true, desc: 'Focus on this later', objective: 'healthy' }
-      ],
-      Music: [
-        { name: 'Learn songs', objective: 'fun' }, 
-        { name: 'Practice singing', objective: 'fun' }
-      ]
-    },
-    title = 'Tasks Tracker',
-    options = {}
-  ) {
+  constructor(tasks = {}, title = 'Tasks Tracker', options = {}) {
     this.id = options.id || Math.random().toString(36).substring(2, 9);
     this.title = title;
     this.tasks = tasks;
     this.storageKey = 'daily_tasks_status';
 
-    // Objective styles: Explicit border color when unchecked, filled background when checked
     this.objectiveColors = {
-      healthy: {
-        border: 'border-emerald-500',
-        bg: 'bg-emerald-600',
-        badge: 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-      },
-      useful: {
-        border: 'border-sky-500',
-        bg: 'bg-sky-600',
-        badge: 'text-sky-700 bg-sky-50 border border-sky-200'
-      },
-      fun: {
-        border: 'border-amber-400',
-        bg: 'bg-amber-500',
-        badge: 'text-amber-700 bg-amber-50 border border-amber-200'
-      },
-      default: {
-        border: 'border-slate-300',
-        bg: 'bg-slate-600',
-        badge: 'text-slate-700 bg-slate-50 border border-slate-200'
-      }
+      healthy: { border: '#10b981', bg: '#059669' },
+      useful: { border: '#0ea5e9', bg: '#0284c7' },
+      fun: { border: '#f59e0b', bg: '#d97706' },
+      default: { border: '#94a3b8', bg: '#64748b' }
     };
+
+    // Automatically inject self-contained CSS styles into the page
+    this._injectStyles();
 
     // Initialize popup element
     this.popup = document.createElement('div');
@@ -51,12 +22,8 @@ class DailyTaskTracker {
     // Run layout, button creation, and toggle binding
     this._createMenuLayout();
     
-    const floatBtnConfig = options.floatBtn || {
-      icon: 'fa-solid fa-list-check',
-      bg: 'bg-emerald-600 hover:bg-emerald-700'
-    };
-    this._addFloatButton(floatBtnConfig.icon, floatBtnConfig.bg);
-    
+    const floatBtnConfig = options.floatBtn || { icon: '📋' };
+    this._addFloatButton(floatBtnConfig.icon);
     this._bindToggle();
 
     // Render UI and bind tasks functionality
@@ -65,37 +32,250 @@ class DailyTaskTracker {
     this.attachEvents();
   }
 
+  _injectStyles() {
+    if (document.getElementById('task-tracker-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'task-tracker-styles';
+    style.textContent = `
+      #floating-widgets-container {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 12px;
+        z-index: 999999;
+        font-family: Roboto, Arial, sans-serif;
+        box-sizing: border-box;
+      }
+      #floating-widgets-container *, #floating-widgets-container *::before, #floating-widgets-container *::after {
+        box-sizing: border-box;
+      }
+      .widget-wrapper {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+      }
+      .widget-float-btn {
+        width: 56px;
+        height: 56px;
+        background-color: #059669;
+        color: #ffffff;
+        border-radius: 50%;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        cursor: pointer;
+        transition: transform 0.2s ease, background-color 0.2s ease;
+        font-size: 22px;
+      }
+      .widget-float-btn:hover {
+        background-color: #047857;
+        transform: scale(1.05);
+      }
+      .widget-popup {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 96px;
+        width: auto;
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        border: 1px solid #e2e8f0;
+        display: none;
+        flex-direction: column;
+        z-index: 999999;
+        overflow: hidden;
+      }
+      @media (min-width: 640px) {
+        .widget-popup {
+          position: absolute;
+          left: auto;
+          right: 0;
+          bottom: 72px;
+          width: 320px;
+        }
+      }
+      .widget-popup.flex {
+        display: flex;
+      }
+      .widget-header {
+        background: #0f172a;
+        color: #ffffff;
+        padding: 12px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        font-weight: bold;
+      }
+      .widget-header-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .widget-close-btn {
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        cursor: pointer;
+        font-size: 18px;
+        padding: 0 4px;
+      }
+      .widget-close-btn:hover {
+        color: #ffffff;
+      }
+      .widget-body {
+        padding: 16px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .widget-section-title {
+        font-size: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #94a3b8;
+        margin-bottom: 6px;
+        padding-left: 4px;
+      }
+      .widget-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 16px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .widget-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 8px;
+        border-radius: 10px;
+        transition: background 0.15s ease;
+        cursor: pointer;
+      }
+      .widget-item:hover {
+        background-color: #f8fafc;
+      }
+      .widget-item.disabled {
+        opacity: 0.5;
+        background-color: #f8fafc;
+        cursor: not-allowed;
+      }
+      .widget-label {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        width: 100%;
+        cursor: pointer;
+      }
+      .widget-item.disabled .widget-label {
+        cursor: not-allowed;
+      }
+      .widget-checkbox-input {
+        display: none;
+      }
+      .widget-checkbox-box {
+        margin-top: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        border: 2px solid #cbd5e1;
+        background: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+        flex-shrink: 0;
+      }
+      .widget-checkbox-input:checked + .widget-checkbox-box {
+        background-color: var(--chk-bg, #059669);
+        border-color: transparent;
+      }
+      .widget-checkbox-box svg {
+        display: none;
+        width: 10px;
+        height: 10px;
+        stroke: #ffffff;
+        stroke-width: 3;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .widget-checkbox-input:checked + .widget-checkbox-box svg {
+        display: block;
+      }
+      .widget-content-box {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        min-width: 0;
+      }
+      .widget-task-title {
+        font-size: 12px;
+        font-weight: 500;
+        color: #334155;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px;
+        user-select: none;
+      }
+      .widget-item.disabled .widget-task-title {
+        color: #94a3b8;
+        text-decoration: line-through;
+      }
+      .widget-badge {
+        font-size: 9px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+      }
+      .badge-default { color: #334155; background: #f1f5f9; border: 1px solid #cbd5e1; }
+      .widget-task-desc {
+        font-size: 10px;
+        color: #94a3b8;
+        margin-top: 2px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   _createMenuLayout() {
     let container = document.getElementById('floating-widgets-container');
     if (!container) {
       container = document.createElement('div');
       container.id = 'floating-widgets-container';
-      container.className = 'fixed bottom-6 right-6 flex flex-col items-end gap-3 z-50 font-sans';
       document.body.appendChild(container);
     }
     this.widgetContainer = container;
 
     this.wrapper = document.createElement('div');
-    this.wrapper.className = 'relative flex flex-col items-end';
+    this.wrapper.className = 'widget-wrapper';
     this.widgetContainer.appendChild(this.wrapper);
   }
 
-  _addFloatButton(icon, bgClasses = 'bg-emerald-600 hover:bg-emerald-700') {
+  _addFloatButton(icon) {
     this.floatBtn = document.createElement('button');
     this.floatBtn.type = 'button';
-    this.floatBtn.className = `w-14 h-14 ${bgClasses} text-white rounded-full flex items-center justify-center shadow-xl cursor-pointer transition-all duration-200 hover:scale-105`;
-    this.floatBtn.innerHTML = `<i class="${icon} text-2xl"></i>`;
+    this.floatBtn.className = 'widget-float-btn';
+    this.floatBtn.innerHTML = icon;
     this.wrapper.appendChild(this.floatBtn);
   }
 
   _bindToggle() {
     this.floatBtn.addEventListener('click', () => {
-      if (this.popup.classList.contains('hidden')) {
-        this.popup.classList.remove('hidden');
-        this.popup.classList.add('flex');
-      } else {
+      if (this.popup.classList.contains('flex')) {
         this.popup.classList.remove('flex');
-        this.popup.classList.add('hidden');
+      } else {
+        this.popup.classList.add('flex');
       }
     });
   
@@ -103,38 +283,35 @@ class DailyTaskTracker {
       const closeBtn = e.target.closest('.widget-close-btn');
       if (!closeBtn) return;
       this.popup.classList.remove('flex');
-      this.popup.classList.add('hidden');
     });
   }
 
   createUI() {
-    this.popup.className =
-      'fixed inset-x-4 bottom-24 sm:absolute sm:inset-x-auto sm:bottom-20 sm:right-0 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 hidden flex-col z-50 overflow-hidden font-sans';
+    this.popup.className = 'widget-popup';
 
     const header = document.createElement('div');
-    header.className =
-      'bg-slate-900 text-white px-4 py-3 flex justify-between items-center text-xs font-bold';
+    header.className = 'widget-header';
     header.innerHTML = `
-      <span class="flex items-center gap-2">
-        <i class="fa-solid fa-list-check text-emerald-400"></i>
+      <span class="widget-header-title">
+        <span>✨</span>
         <span>${this.title}</span>
       </span>
-      <span class="widget-close-btn cursor-pointer text-slate-400 hover:text-white text-base">&times;</span>
+      <button class="widget-close-btn">&times;</button>
     `;
 
     const container = document.createElement('div');
-    container.className = 'p-4 space-y-4';
+    container.className = 'widget-body';
 
     let taskIndex = 0;
     Object.entries(this.tasks).forEach(([section, taskList]) => {
       const sectionDiv = document.createElement('div');
 
-      const sectionTitle = document.createElement('h4');
-      sectionTitle.className = 'text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 px-1';
+      const sectionTitle = document.createElement('div');
+      sectionTitle.className = 'widget-section-title';
       sectionTitle.textContent = section;
 
       const ul = document.createElement('ul');
-      ul.className = 'space-y-1';
+      ul.className = 'widget-list';
 
       taskList.forEach((taskItem) => {
         const isObj = typeof taskItem === 'object' && taskItem !== null;
@@ -148,39 +325,27 @@ class DailyTaskTracker {
 
         const id = `task-${this.id}-${taskIndex++}`;
         const li = document.createElement('li');
-        
-        li.className = `flex items-start justify-between p-2 rounded-xl transition ${
-          isDisabled
-            ? 'opacity-50 bg-slate-50/50 cursor-not-allowed'
-            : 'hover:bg-slate-50 cursor-pointer'
-        }`;
+        li.className = `widget-item ${isDisabled ? 'disabled' : ''}`;
         
         li.innerHTML = `
-          <div class="flex items-start gap-3 w-full">
-            <label for="${id}" class="relative flex items-start gap-3 w-full ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}">
-              <input type="checkbox" id="${id}" data-task="${taskName}" data-type="${taskType}" ${
-                isDisabled ? 'disabled' : ''
-              } class="sr-only peer">
-              
-              <!-- Custom colored checkbox box -->
-              <div class="mt-0.5 w-4 h-4 rounded border-2 ${colors.border} bg-white peer-checked:${colors.bg} peer-checked:border-transparent flex items-center justify-center transition flex-shrink-0 ${isDisabled ? 'opacity-50' : ''}">
-                <svg class="w-2.5 h-2.5 text-white hidden peer-checked:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                </svg>
-              </div>
+          <label for="${id}" class="widget-label">
+            <input type="checkbox" id="${id}" data-task="${taskName}" data-type="${taskType}" ${isDisabled ? 'disabled' : ''} class="widget-checkbox-input">
+            
+            <div class="widget-checkbox-box" style="--chk-bg: ${colors.bg}; border-color: ${colors.border};">
+              <svg viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
 
-              <div class="flex flex-col flex-grow min-w-0">
-                <span class="text-xs font-medium select-none flex items-center flex-wrap gap-1 ${
-                  isDisabled ? 'text-slate-400 line-through' : 'text-slate-700'
-                }">
-                  <span class="break-words">${taskName}</span>
-                  ${taskType === 'weekly' ? `<span class="text-[9px] px-1.5 py-0.5 rounded no-underline font-semibold ${colors.badge}">Weekly</span>` : ''}
-                  ${isDisabled ? '<span class="text-[9px] text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded no-underline font-normal">Disabled</span>' : ''}
-                </span>
-                ${taskDesc ? `<span class="text-[10px] text-slate-400 mt-0.5 break-words">${taskDesc}</span>` : ''}
-              </div>
-            </label>
-          </div>
+            <div class="widget-content-box">
+              <span class="widget-task-title">
+                <span>${taskName}</span>
+                ${taskType === 'weekly' ? '<span class="widget-badge badge-default">Weekly</span>' : ''}
+                ${isDisabled ? '<span class="widget-badge badge-default">Disabled</span>' : ''}
+              </span>
+              ${taskDesc ? `<span class="widget-task-desc">${taskDesc}</span>` : ''}
+            </div>
+          </label>
         `;
         ul.appendChild(li);
       });
@@ -218,31 +383,23 @@ class DailyTaskTracker {
 
   saveState() {
     const checkboxes = this.popup.querySelectorAll('input[type="checkbox"]:not([disabled])');
-    
     let existingData = {};
     const storedValue = localStorage.getItem(this.storageKey);
     if (storedValue) {
-      try {
-        existingData = JSON.parse(storedValue);
-      } catch (e) {}
+      try { existingData = JSON.parse(storedValue); } catch (e) {}
     }
 
     const dailyTasks = existingData.dailyTasks || {};
     const weeklyTasks = existingData.weeklyTasks || {};
-
     const currentDailyDate = this.getTodayDateString();
     const currentWeekKey = this.getWeekKey();
 
-    const savedDailyDate = existingData.dailyDate;
-    const savedWeekKey = existingData.weekKey;
-
-    const activeDaily = savedDailyDate === currentDailyDate ? dailyTasks : {};
-    const activeWeekly = savedWeekKey === currentWeekKey ? weeklyTasks : {};
+    const activeDaily = existingData.dailyDate === currentDailyDate ? dailyTasks : {};
+    const activeWeekly = existingData.weekKey === currentWeekKey ? weeklyTasks : {};
 
     checkboxes.forEach((chk) => {
       const taskName = chk.dataset.task;
       const taskType = chk.dataset.type;
-
       if (taskType === 'weekly') {
         activeWeekly[taskName] = chk.checked;
       } else {
@@ -256,14 +413,12 @@ class DailyTaskTracker {
       dailyTasks: activeDaily,
       weeklyTasks: activeWeekly
     };
-
     localStorage.setItem(this.storageKey, JSON.stringify(data));
   }
 
   loadState() {
     const storedValue = localStorage.getItem(this.storageKey);
     if (!storedValue) return;
-
     try {
       const data = JSON.parse(storedValue);
       const today = this.getTodayDateString();
@@ -285,11 +440,12 @@ class DailyTaskTracker {
         }
       });
     } catch (e) {
-      console.error('Failed to parse task localStorage state:', e);
+      console.error('Failed to parse task state:', e);
     }
   }
 }
 
+// Instantiation:
 new DailyTaskTracker({
   Foundation: [
     { name: 'Exercises', type: 'daily', objective: 'healthy' },

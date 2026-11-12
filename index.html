@@ -258,6 +258,29 @@
       </div>
     </div>
   </div>
+  <!-- File Details Modal -->
+<div id="modalFileDetails" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+      <h3 class="font-bold text-slate-800 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info text-indigo-600"></i> File Details & Cryptographic Hashes
+      </h3>
+      <button onclick="closeModals()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+    
+    <div id="fileDetailsBody" class="p-6 space-y-4 text-sm text-slate-600 max-h-[75vh] overflow-y-auto">
+      <!-- Dynamic Content Injected Here -->
+    </div>
+
+    <div class="flex items-center justify-end px-6 py-3.5 border-t border-slate-100 bg-slate-50/50 gap-2">
+      <button onclick="closeModals()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition">
+        Close
+      </button>
+    </div>
+  </div>
+</div>
   <script src="./backup.js"></script>
   <script src="./file.js"></script>
 </body>

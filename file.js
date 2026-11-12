@@ -34,14 +34,27 @@ function saveSettings() {
   const key = document.getElementById('settingApiKeyInput').value.trim();
   const bucket = document.getElementById('settingBucketInput').value.trim() || 'files';
 
+  // Capture Firebase configs
+  const fbApiKey = document.getElementById('settingFirebaseApiKeyInput')?.value.trim() || '';
+  const fbAppId = document.getElementById('settingFirebaseAppIdInput')?.value.trim() || '';
+  const fbProjectId = document.getElementById('settingFirebaseProjectIdInput')?.value.trim() || '';
+  const fbBucket = document.getElementById('settingFirebaseBucketInput')?.value.trim() || '';
+
   if (!url || !key) {
     showToast('URL and Anon Key are required', 'warning');
     return;
   }
 
+  // Save Supabase
   localStorage.setItem('sb_url', url);
   localStorage.setItem('sb_key', key);
   localStorage.setItem('sb_bucket', bucket);
+
+  // Save Firebase
+  localStorage.setItem('fb_apikey', fbApiKey);
+  localStorage.setItem('fb_appid', fbAppId);
+  localStorage.setItem('fb_projectid', fbProjectId);
+  localStorage.setItem('fb_bucket', fbBucket);
 
   initSupabase(url, key, bucket);
   switchTab('explorer');

@@ -1,15 +1,146 @@
+/**
+ * Dedicated FilePreviewManager class to handle file previews, 
+ * media rendering, and text editing.
+ */
+class FilePreviewManager {
+  constructor(options = {}) {
+    this.bucket = options.bucket || 'files';
+    this.supabaseClient = options.supabaseClient || null;
+    
+    // Editor State
+    this.currentPreviewPath = null;
+    this.currentPreviewName = null;
+    this.currentPreviewText = null;
+    this.isTextEditor = false;
+
+    // Callbacks
+    this.onToast = options.onToast || ((msg, type) => showToast(msg, type));
+    this.onSaveSuccess = options.onSaveSuccess || (() => {});
+  }
+
+  setConfig(client, bucket) {
+    if (client) this.supabaseClient = client;
+    if (bucket) this.bucket = bucket;
+  }
+
+  async openPreview(path, name) {
+    if (!this.supabaseClient) {
+      this.onToast('Supabase client not initialized', 'error');
+      return;
+    }
+
+    const title = document.getElementById('previewTitle');
+    const body = document.getElementById('previewBody');
+    const downloadBtn = document.getElementById('previewDownloadBtn');
+    const saveBtn = document.getElementById('previewSaveBtn');
+    const cancelBtn = document.getElementById('previewCancelEditBtn');
+
+    this.currentPreviewPath = path;
+    this.currentPreviewName = name;
+    this.currentPreviewText = null;
+    this.isTextEditor = false;
+
+    if (saveBtn) saveBtn.classList.add('hidden');
+    if (cancelBtn) cancelBtn.classList.add('hidden');
+
+    if (title) title.textContent = name;
+    if (body) body.innerHTML = '<div class="text-slate-500"><i class="fa-solid fa-spinner fa-spin text-2xl"></i></div>';
+
+    try {
+      const { data, error } = await this.supabaseClient
+        .storage
+        .from(this.bucket)
+        .createSignedUrl(path, 3600);
+
+      if (error) throw error;
+
+      const url = data.signedUrl;
+      if (downloadBtn) {
+        downloadBtn.href = url;
+        downloadBtn.download = name;
+      }
+
+      if (isImage(name)) {
+        body.innerHTML = `<img src="${url}" alt="${escapeHtml(name)}" class="max-w-full max-h-[70vh] rounded-lg shadow-md object-contain">`;
+      } else if (isAudio(name)) {
+        body.innerHTML = `
+          <div class="w-full max-w-lg">
+            <audio controls class="w-full" src="${url}"></audio>
+            <p class="text-center text-xs text-slate-500 mt-3">${escapeHtml(name)}</p>
+          </div>`;
+      } else if (isVideo(name)) {
+        body.innerHTML = `<video controls class="max-w-full max-h-[70vh] rounded-lg shadow-md" src="${url}"></video>`;
+      } else if (isText(name)) {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Failed to fetch file content');
+        const text = await res.text();
+        this.currentPreviewText = text;
+        this.isTextEditor = true;
+
+        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 text-slate-100 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
+        if (saveBtn) saveBtn.classList.remove('hidden');
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+      } else {
+        body.innerHTML = `
+          <div class="text-center space-y-4">
+            <i class="fa-solid fa-file text-5xl text-slate-400"></i>
+            <p class="text-sm text-slate-600">Preview not available for this file type.</p>
+          </div>`;
+      }
+
+      const modal = document.getElementById('modalPreview');
+      if (modal) modal.classList.remove('hidden');
+    } catch (err) {
+      this.onToast(err.message || 'Failed to load file', 'error');
+    }
+  }
+
+  cancelEditText() {
+    if (!this.isTextEditor || this.currentPreviewText === null) return;
+    const textarea = document.getElementById('editTextarea');
+    if (textarea) {
+      textarea.value = this.currentPreviewText;
+    }
+    this.onToast('Changes discarded', 'info', 1500);
+  }
+
+  async saveEditedText() {
+    const textarea = document.getElementById('editTextarea');
+    if (!textarea || !this.currentPreviewPath || !this.isTextEditor) return;
+
+    const newContent = textarea.value;
+    try {
+      this.onToast('Saving...', 'info', 1500);
+      const blob = new Blob([newContent], { type: 'text/plain;charset=utf-8' });
+      const { error } = await this.supabaseClient
+        .storage
+        .from(this.bucket)
+        .upload(this.currentPreviewPath, blob, {
+          cacheControl: 'no-cache',
+          upsert: true,
+          contentType: 'text/plain'
+        });
+
+      if (error) throw error;
+
+      this.currentPreviewText = newContent;
+      this.onToast('File saved successfully', 'success');
+      this.onSaveSuccess();
+    } catch (err) {
+      console.error(err);
+      this.onToast(err.message || 'Failed to save file', 'error');
+    }
+  }
+}
+
+// Global Variables & State
 let supabaseClient = null;
 let currentBucket = 'files';
 let currentPath = '';
 let folderHistory = [{ path: '', name: 'Root' }];
 let allItems = [];
 let filteredItems = [];
-
-// Editor state
-let currentPreviewPath = null;
-let currentPreviewName = null;
-let currentPreviewText = null;
-let isTextEditor = false;
+let filePreviewManager = null;
 
 // ---------- Init ----------
 window.addEventListener('DOMContentLoaded', () => {
@@ -20,6 +151,14 @@ window.addEventListener('DOMContentLoaded', () => {
   if (savedUrl) document.getElementById('settingUrlInput').value = savedUrl;
   if (savedKey) document.getElementById('settingApiKeyInput').value = savedKey;
   document.getElementById('settingBucketInput').value = savedBucket;
+
+  // Initialize the preview manager
+  filePreviewManager = new FilePreviewManager({
+    bucket: currentBucket,
+    supabaseClient: supabaseClient,
+    onToast: (msg, type, duration) => showToast(msg, type, duration),
+    onSaveSuccess: () => listFiles()
+  });
 
   if (savedUrl && savedKey) {
     initSupabase(savedUrl, savedKey, savedBucket);
@@ -64,6 +203,11 @@ function initSupabase(url, key, bucket) {
   try {
     supabaseClient = window.supabase.createClient(url, key);
     currentBucket = bucket;
+
+    if (filePreviewManager) {
+      filePreviewManager.setConfig(supabaseClient, currentBucket);
+    }
+
     document.getElementById('headerUrl').textContent = url + '  •  bucket: ' + bucket;
     currentPath = '';
     folderHistory = [{ path: '', name: 'Root' }];
@@ -336,105 +480,22 @@ async function handleFileUpload(event, isFolderUpload = false) {
   event.target.value = '';
 }
 
-// ---------- Preview / Text Editor (with cache busting) ----------
+// ---------- Preview / Text Editor Wrappers ----------
 async function openPreview(path, name) {
-  const title = document.getElementById('previewTitle');
-  const body = document.getElementById('previewBody');
-  const downloadBtn = document.getElementById('previewDownloadBtn');
-  const saveBtn = document.getElementById('previewSaveBtn');
-  const cancelBtn = document.getElementById('previewCancelEditBtn');
-
-  currentPreviewPath = path;
-  currentPreviewName = name;
-  currentPreviewText = null;
-  isTextEditor = false;
-  saveBtn.classList.add('hidden');
-  cancelBtn.classList.add('hidden');
-
-  title.textContent = name;
-  body.innerHTML = '<div class="text-slate-500"><i class="fa-solid fa-spinner fa-spin text-2xl"></i></div>';
-
-  try {
-    const { data, error } = await supabaseClient
-      .storage
-      .from(currentBucket)
-      .createSignedUrl(path, 3600);
-
-    if (error) throw error;
-
-    const url = data.signedUrl;
-    downloadBtn.href = url;
-    downloadBtn.download = name;
-
-    if (isImage(name)) {
-      body.innerHTML = `<img src="${url}" alt="${escapeHtml(name)}" class="max-w-full max-h-[70vh] rounded-lg shadow-md object-contain">`;
-    } else if (isAudio(name)) {
-      body.innerHTML = `
-        <div class="w-full max-w-lg">
-          <audio controls class="w-full" src="${url}"></audio>
-          <p class="text-center text-xs text-slate-500 mt-3">${escapeHtml(name)}</p>
-        </div>`;
-    } else if (isVideo(name)) {
-      body.innerHTML = `<video controls class="max-w-full max-h-[70vh] rounded-lg shadow-md" src="${url}"></video>`;
-    } else if (isText(name)) {
-      // Force fresh content (no cache)
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error('Failed to fetch file content');
-      const text = await res.text();
-      currentPreviewText = text;
-      isTextEditor = true;
-
-      body.innerHTML = `<textarea id="editTextarea">${escapeHtml(text)}</textarea>`;
-      saveBtn.classList.remove('hidden');
-      cancelBtn.classList.remove('hidden');
-    } else {
-      body.innerHTML = `
-        <div class="text-center space-y-4">
-          <i class="fa-solid fa-file text-5xl text-slate-400"></i>
-          <p class="text-sm text-slate-600">Preview not available for this file type.</p>
-        </div>`;
-    }
-
-    document.getElementById('modalPreview').classList.remove('hidden');
-  } catch (err) {
-    showToast(err.message || 'Failed to load file', 'error');
+  if (filePreviewManager) {
+    await filePreviewManager.openPreview(path, name);
   }
 }
 
 function cancelEditText() {
-  if (!isTextEditor || currentPreviewText === null) return;
-  const textarea = document.getElementById('editTextarea');
-  if (textarea) {
-    textarea.value = currentPreviewText;
+  if (filePreviewManager) {
+    filePreviewManager.cancelEditText();
   }
-  showToast('Changes discarded', 'info', 1500);
 }
 
 async function saveEditedText() {
-  const textarea = document.getElementById('editTextarea');
-  if (!textarea || !currentPreviewPath || !isTextEditor) return;
-
-  const newContent = textarea.value;
-  try {
-    showToast('Saving...', 'info', 1500);
-    const blob = new Blob([newContent], { type: 'text/plain;charset=utf-8' });
-    const { error } = await supabaseClient
-      .storage
-      .from(currentBucket)
-      .upload(currentPreviewPath, blob, {
-        cacheControl: 'no-cache',
-        upsert: true,
-        contentType: 'text/plain'
-      });
-
-    if (error) throw error;
-
-    currentPreviewText = newContent;
-    showToast('File saved successfully', 'success');
-    listFiles();
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || 'Failed to save file', 'error');
+  if (filePreviewManager) {
+    await filePreviewManager.saveEditedText();
   }
 }
 
@@ -578,7 +639,7 @@ async function openFileDetails(path, name) {
   }
 }
 
-// ---------- Backup (fresh downloads + content hash) ----------
+// ---------- Backup ----------
 async function createBackup() {
   if (!supabaseClient) {
     showToast('Not connected', 'warning');
@@ -740,7 +801,9 @@ function closeModals() {
   document.querySelectorAll('.fixed').forEach(m => {
     if (m.id !== 'toastContainer') m.classList.add('hidden');
   });
-  isTextEditor = false;
+  if (filePreviewManager) {
+    filePreviewManager.isTextEditor = false;
+  }
   document.getElementById('previewSaveBtn')?.classList.add('hidden');
   document.getElementById('previewCancelEditBtn')?.classList.add('hidden');
 }

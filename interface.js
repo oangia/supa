@@ -1,6 +1,6 @@
 /**
  * Dedicated FilePreviewManager class to handle file previews, 
- * media rendering, text editing, and live cryptographic hashes.
+ * media rendering, text editing, and on-demand cryptographic hashes.
  */
 class FilePreviewManager {
   constructor(options = {}) {
@@ -48,11 +48,12 @@ class FilePreviewManager {
 
     if (title) title.textContent = name;
     if (body) body.innerHTML = '<div class="text-slate-500 py-12 flex justify-center"><i class="fa-solid fa-spinner fa-spin text-2xl"></i></div>';
+    
     if (sidebarDetails) {
       sidebarDetails.innerHTML = `
         <div class="text-center py-10 space-y-2 text-slate-400">
           <i class="fa-solid fa-spinner fa-spin text-xl text-indigo-600"></i>
-          <p class="text-xs">Computing hashes...</p>
+          <p class="text-xs">Loading file info...</p>
         </div>
       `;
     }
@@ -74,7 +75,7 @@ class FilePreviewManager {
         downloadBtn.download = name;
       }
 
-      // Fetch binary content for rendering & hashes concurrently
+      // Fetch binary content for rendering & lazy hashing
       const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to fetch file content');
       this.currentArrayBuffer = await res.arrayBuffer();
@@ -106,8 +107,8 @@ class FilePreviewManager {
           </div>`;
       }
 
-      // Compute cryptographic hashes and render complete details in the sidebar
-      await this.renderSidebarHashes(path, name, this.currentArrayBuffer);
+      // Render sidebar with lightweight details and lazy hash buttons
+      await this.renderSidebarLazy(path, name, this.currentArrayBuffer);
 
     } catch (err) {
       this.onToast(err.message || 'Failed to load file', 'error');
@@ -117,70 +118,127 @@ class FilePreviewManager {
     }
   }
 
-  async renderSidebarHashes(path, name, arrayBuffer) {
+  async renderSidebarLazy(path, name, arrayBuffer) {
     const sidebarDetails = document.getElementById('previewSidebarDetails');
     if (!sidebarDetails) return;
 
+    // Instantly compute lightweight Path Hash
+    const pathHash = await computeSha256(path);
+
+    sidebarDetails.innerHTML = `
+      <div class="space-y-4 text-xs text-slate-600">
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">File Name</span>
+          <p class="text-slate-800 font-medium break-all">${escapeHtml(name)}</p>
+        </div>
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">File Size</span>
+          <p class="text-slate-800 font-mono text-xs">${formatBytes(arrayBuffer.byteLength)} (${arrayBuffer.byteLength} bytes)</p>
+        </div>
+
+        <hr class="border-slate-100">
+
+        <!-- 1. Path Hash (Pre-calculated) -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
+            <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 block mb-0.5">Exact string hashed: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">${escapeHtml(path)}</code></span>
+            <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${pathHash}</div>
+          </div>
+        </div>
+
+        <!-- 2. Content Hash (Lazy) -->
+        <div class="space-y-1.5" id="contentHashContainer">
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 block mb-1">Hashed input: ArrayBuffer (${arrayBuffer.byteLength} bytes)</span>
+            <button onclick="filePreviewManager.computeContentHash()" class="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs transition border border-indigo-200 flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-fingerprint"></i> Calculate Content Hash
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Combined Hash (Lazy) -->
+        <div class="space-y-1.5" id="combinedHashContainer">
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 block mb-1">Requires Path Hash + Content Hash</span>
+            <button onclick="filePreviewManager.computeCombinedHash()" class="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold rounded-lg text-xs transition border border-emerald-200 flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-bolt"></i> Calculate Combined Hash
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  async computeContentHash() {
+    const container = document.getElementById('contentHashContainer');
+    if (!container || !this.currentArrayBuffer) return;
+
+    container.innerHTML = `
+      <div class="flex items-center justify-center py-3 text-slate-400 text-xs gap-2">
+        <i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> Computing content hash...
+      </div>
+    `;
+
     try {
-      const rawPathString = path;
-      const pathHash = await computeSha256(rawPathString);
-      const contentHash = await computeSha256(arrayBuffer);
+      const contentHash = await computeSha256(this.currentArrayBuffer);
+      this.cachedContentHash = contentHash;
+
+      container.innerHTML = `
+        <div class="flex justify-between items-center">
+          <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
+          <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
+        </div>
+        <div>
+          <span class="text-[10px] text-slate-400 block mb-0.5">Hashed input: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">ArrayBuffer (${this.currentArrayBuffer.byteLength} bytes)</code></span>
+          <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${contentHash}</div>
+        </div>
+      `;
+    } catch (err) {
+      container.innerHTML = `<div class="text-xs text-rose-600">Failed to compute content hash</div>`;
+    }
+  }
+
+  async computeCombinedHash() {
+    const container = document.getElementById('combinedHashContainer');
+    if (!container || !this.currentPreviewPath || !this.currentArrayBuffer) return;
+
+    container.innerHTML = `
+      <div class="flex items-center justify-center py-3 text-slate-400 text-xs gap-2">
+        <i class="fa-solid fa-spinner fa-spin text-emerald-600"></i> Computing combined hash...
+      </div>
+    `;
+
+    try {
+      const pathHash = await computeSha256(this.currentPreviewPath);
+      const contentHash = this.cachedContentHash || await computeSha256(this.currentArrayBuffer);
+      this.cachedContentHash = contentHash;
+
       const rawCombinedString = pathHash + contentHash;
       const combinedHash = await computeSha256(rawCombinedString);
 
-      sidebarDetails.innerHTML = `
-        <div class="space-y-4 text-xs text-slate-600">
-          <div>
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">File Name</span>
-            <p class="text-slate-800 font-medium break-all">${escapeHtml(name)}</p>
-          </div>
-          <div>
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">File Size</span>
-            <p class="text-slate-800 font-mono text-xs">${formatBytes(arrayBuffer.byteLength)} (${arrayBuffer.byteLength} bytes)</p>
-          </div>
-
-          <hr class="border-slate-100">
-
-          <!-- 1. Path Hash -->
-          <div class="space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
-              <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
-            </div>
-            <div>
-              <span class="text-[10px] text-slate-400 block mb-0.5">Exact string hashed: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">${escapeHtml(rawPathString)}</code></span>
-              <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${pathHash}</div>
-            </div>
-          </div>
-
-          <!-- 2. Content Hash -->
-          <div class="space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
-              <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
-            </div>
-            <div>
-              <span class="text-[10px] text-slate-400 block mb-0.5">Hashed input: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">ArrayBuffer (${arrayBuffer.byteLength} bytes)</code></span>
-              <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${contentHash}</div>
-            </div>
-          </div>
-
-          <!-- 3. Combined Hash -->
-          <div class="space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash</span>
-              <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
-            </div>
-            <div>
-              <span class="text-[10px] text-slate-400 block mb-0.5">Exact concatenated string hashed:</span>
-              <div class="font-mono text-[9px] bg-slate-100 text-slate-700 p-1.5 rounded border border-slate-200 break-all select-all max-h-14 overflow-y-auto mb-1">${escapeHtml(rawCombinedString)}</div>
-              <div class="font-mono text-[10px] bg-slate-900 text-emerald-400 p-2 rounded break-all select-all">${combinedHash}</div>
-            </div>
-          </div>
+      container.innerHTML = `
+        <div class="flex justify-between items-center">
+          <span class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash</span>
+          <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
+        </div>
+        <div>
+          <span class="text-[10px] text-slate-400 block mb-0.5">Exact concatenated string hashed:</span>
+          <div class="font-mono text-[9px] bg-slate-100 text-slate-700 p-1.5 rounded border border-slate-200 break-all select-all max-h-14 overflow-y-auto mb-1">${escapeHtml(rawCombinedString)}</div>
+          <div class="font-mono text-[10px] bg-slate-900 text-emerald-400 p-2 rounded break-all select-all">${combinedHash}</div>
         </div>
       `;
-    } catch (e) {
-      sidebarDetails.innerHTML = `<div class="text-xs text-rose-600">Error computing hashes</div>`;
+    } catch (err) {
+      container.innerHTML = `<div class="text-xs text-rose-600">Failed to compute combined hash</div>`;
     }
   }
 
@@ -214,9 +272,9 @@ class FilePreviewManager {
 
       this.currentPreviewText = newContent;
       this.currentArrayBuffer = await blob.arrayBuffer();
+      this.cachedContentHash = null; // Invalidate cached hash on save
       
-      // Recompute hashes for updated file content in sidebar
-      await this.renderSidebarHashes(this.currentPreviewPath, this.currentPreviewName, this.currentArrayBuffer);
+      await this.renderSidebarLazy(this.currentPreviewPath, this.currentPreviewName, this.currentArrayBuffer);
 
       this.onToast('File saved successfully', 'success');
       this.onSaveSuccess();
@@ -246,7 +304,6 @@ window.addEventListener('DOMContentLoaded', () => {
   if (savedKey) document.getElementById('settingApiKeyInput').value = savedKey;
   document.getElementById('settingBucketInput').value = savedBucket;
 
-  // Initialize the preview manager
   filePreviewManager = new FilePreviewManager({
     bucket: currentBucket,
     supabaseClient: supabaseClient,
@@ -267,7 +324,6 @@ function saveSettings() {
   const key = document.getElementById('settingApiKeyInput').value.trim();
   const bucket = document.getElementById('settingBucketInput').value.trim() || 'files';
 
-  // Capture Firebase configs
   const fbApiKey = document.getElementById('settingFirebaseApiKeyInput')?.value.trim() || '';
   const fbAppId = document.getElementById('settingFirebaseAppIdInput')?.value.trim() || '';
   const fbProjectId = document.getElementById('settingFirebaseProjectIdInput')?.value.trim() || '';
@@ -278,12 +334,10 @@ function saveSettings() {
     return;
   }
 
-  // Save Supabase
   localStorage.setItem('sb_url', url);
   localStorage.setItem('sb_key', key);
   localStorage.setItem('sb_bucket', bucket);
 
-  // Save Firebase
   localStorage.setItem('fb_apikey', fbApiKey);
   localStorage.setItem('fb_appid', fbAppId);
   localStorage.setItem('fb_projectid', fbProjectId);
@@ -413,6 +467,7 @@ function renderView() {
       ? `navigateToFolder('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')`
       : `openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')`;
 
+    // Actions column cleaned up: click row/name to preview, only delete button remains here
     row.innerHTML = `
       <td class="py-2.5 px-4">
         <div class="flex items-center gap-3 cursor-pointer" onclick="${clickAction}">
@@ -424,18 +479,7 @@ function renderView() {
       <td class="py-2.5 px-4 text-slate-500 font-mono">${sizeStr}</td>
       <td class="py-2.5 px-4 text-slate-500 font-mono">${updated}</td>
       <td class="py-2.5 px-4 text-right space-x-1">
-        ${!isFolder ? `
-          <button onclick="openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Open" class="p-1.5 hover:text-indigo-600 rounded hover:bg-slate-100">
-            <i class="fa-solid fa-eye"></i>
-          </button>
-          <button onclick="openFileDetails('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="File Details & Hashes" class="p-1.5 hover:text-sky-600 rounded hover:bg-slate-100">
-            <i class="fa-solid fa-fingerprint"></i>
-          </button>
-          <button onclick="downloadFile('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Download" class="p-1.5 hover:text-emerald-600 rounded hover:bg-slate-100">
-            <i class="fa-solid fa-download"></i>
-          </button>
-        ` : ''}
-        <button onclick="deleteItem('${escapeHtml(fullPath)}', ${isFolder})" title="Delete" class="p-1.5 hover:text-rose-600 rounded hover:bg-slate-100">
+        <button onclick="deleteItem('${escapeHtml(fullPath)}', ${isFolder})" title="Delete" class="p-1.5 hover:text-rose-600 rounded hover:bg-slate-100 transition">
           <i class="fa-solid fa-trash"></i>
         </button>
       </td>
@@ -584,7 +628,7 @@ async function handleFileUpload(event, isFolderUpload = false) {
   event.target.value = '';
 }
 
-// ---------- Preview / Text Editor Wrappers ----------
+// ---------- Preview Wrappers ----------
 async function openPreview(path, name) {
   if (filePreviewManager) {
     await filePreviewManager.openPreview(path, name);
@@ -626,7 +670,7 @@ async function downloadFile(path, name) {
   }
 }
 
-// ---------- Cryptographic Hashes & File Details ----------
+// ---------- Cryptographic Hash Helper ----------
 async function computeSha256(messageOrBuffer) {
   const msgBuffer = typeof messageOrBuffer === 'string' 
     ? new TextEncoder().encode(messageOrBuffer) 
@@ -635,11 +679,6 @@ async function computeSha256(messageOrBuffer) {
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Aliased to openPreview so both preview and fingerprint action buttons open the split view
-async function openFileDetails(path, name) {
-  await openPreview(path, name);
 }
 
 // ---------- Backup ----------

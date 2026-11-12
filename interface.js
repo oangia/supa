@@ -95,7 +95,7 @@ class FilePreviewManager {
         this.currentPreviewText = text;
         this.isTextEditor = true;
 
-        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
+        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 text-slate-100 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
         if (saveBtn) saveBtn.classList.remove('hidden');
         if (cancelBtn) cancelBtn.classList.remove('hidden');
       } else {
@@ -106,7 +106,7 @@ class FilePreviewManager {
           </div>`;
       }
 
-      // Compute cryptographic hashes for the sidebar
+      // Compute cryptographic hashes and render complete details in the sidebar
       await this.renderSidebarHashes(path, name, this.currentArrayBuffer);
 
     } catch (err) {
@@ -122,13 +122,18 @@ class FilePreviewManager {
     if (!sidebarDetails) return;
 
     try {
-      const pathHash = await computeSha256(path);
+      const rawPathString = path;
+      const pathHash = await computeSha256(rawPathString);
       const contentHash = await computeSha256(arrayBuffer);
       const rawCombinedString = pathHash + contentHash;
       const combinedHash = await computeSha256(rawCombinedString);
 
       sidebarDetails.innerHTML = `
-        <div class="space-y-4">
+        <div class="space-y-4 text-xs text-slate-600">
+          <div>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">File Name</span>
+            <p class="text-slate-800 font-medium break-all">${escapeHtml(name)}</p>
+          </div>
           <div>
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">File Size</span>
             <p class="text-slate-800 font-mono text-xs">${formatBytes(arrayBuffer.byteLength)} (${arrayBuffer.byteLength} bytes)</p>
@@ -137,30 +142,40 @@ class FilePreviewManager {
           <hr class="border-slate-100">
 
           <!-- 1. Path Hash -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
             <div class="flex justify-between items-center">
-              <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
-              <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+              <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
+              <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
             </div>
-            <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${pathHash}</div>
+            <div>
+              <span class="text-[10px] text-slate-400 block mb-0.5">Exact string hashed: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">${escapeHtml(rawPathString)}</code></span>
+              <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${pathHash}</div>
+            </div>
           </div>
 
           <!-- 2. Content Hash -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
             <div class="flex justify-between items-center">
-              <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
-              <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+              <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
+              <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
             </div>
-            <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${contentHash}</div>
+            <div>
+              <span class="text-[10px] text-slate-400 block mb-0.5">Hashed input: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">ArrayBuffer (${arrayBuffer.byteLength} bytes)</code></span>
+              <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${contentHash}</div>
+            </div>
           </div>
 
           <!-- 3. Combined Hash -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
             <div class="flex justify-between items-center">
-              <span class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash</span>
-              <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+              <span class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash</span>
+              <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
             </div>
-            <div class="font-mono text-[10px] bg-slate-900 text-emerald-400 p-2 rounded break-all select-all">${combinedHash}</div>
+            <div>
+              <span class="text-[10px] text-slate-400 block mb-0.5">Exact concatenated string hashed:</span>
+              <div class="font-mono text-[9px] bg-slate-100 text-slate-700 p-1.5 rounded border border-slate-200 break-all select-all max-h-14 overflow-y-auto mb-1">${escapeHtml(rawCombinedString)}</div>
+              <div class="font-mono text-[10px] bg-slate-900 text-emerald-400 p-2 rounded break-all select-all">${combinedHash}</div>
+            </div>
           </div>
         </div>
       `;
@@ -439,7 +454,6 @@ function renderBreadcrumbs() {
     const btn = document.createElement('button');
     btn.className = (isLast ? "font-bold text-indigo-600" : "hover:text-slate-900") + " inline-flex items-center";
     
-    // Check if the crumb name is 'root' and prepend the house icon
     if (crumb.name.toLowerCase() === 'root') {
       btn.innerHTML = `<i class="fa-solid fa-house mr-1 text-xs"></i><span>${escapeHtml(crumb.name)}</span>`;
     } else {
@@ -623,7 +637,7 @@ async function computeSha256(messageOrBuffer) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Aliased to openPreview so clicking the details button also triggers the split preview/sidebar view
+// Aliased to openPreview so both preview and fingerprint action buttons open the split view
 async function openFileDetails(path, name) {
   await openPreview(path, name);
 }

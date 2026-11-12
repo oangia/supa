@@ -77,7 +77,7 @@ class DailyTaskTracker extends Widget {
     });
     this.title = title;
     this.tasks = tasks;
-    this.cookieName = 'daily_tasks_status';
+    this.storageKey = 'daily_tasks_status';
 
     // Objective styles: Explicit border color when unchecked, filled background when checked
     this.objectiveColors = {
@@ -124,8 +124,7 @@ class DailyTaskTracker extends Widget {
     `;
 
     const container = document.createElement('div');
-    container.className =
-      'p-4 space-y-4';
+    container.className = 'p-4 space-y-4';
 
     let taskIndex = 0;
     Object.entries(this.tasks).forEach(([section, taskList]) => {
@@ -164,7 +163,7 @@ class DailyTaskTracker extends Widget {
                 isDisabled ? 'disabled' : ''
               } class="sr-only peer">
               
-              <!-- Custom colored checkbox box (colored border when unchecked, colored fill when checked) -->
+              <!-- Custom colored checkbox box -->
               <div class="mt-0.5 w-4 h-4 rounded border-2 ${colors.border} bg-white peer-checked:${colors.bg} peer-checked:border-transparent flex items-center justify-center transition flex-shrink-0 ${isDisabled ? 'opacity-50' : ''}">
                 <svg class="w-2.5 h-2.5 text-white hidden peer-checked:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
@@ -222,10 +221,10 @@ class DailyTaskTracker extends Widget {
     const checkboxes = this.popup.querySelectorAll('input[type="checkbox"]:not([disabled])');
     
     let existingData = {};
-    const cookieValue = Cookie.get(this.cookieName);
-    if (cookieValue) {
+    const storedValue = localStorage.getItem(this.storageKey);
+    if (storedValue) {
       try {
-        existingData = JSON.parse(cookieValue);
+        existingData = JSON.parse(storedValue);
       } catch (e) {}
     }
 
@@ -259,15 +258,15 @@ class DailyTaskTracker extends Widget {
       weeklyTasks: activeWeekly
     };
 
-    Cookie.set(this.cookieName, JSON.stringify(data), 365);
+    localStorage.setItem(this.storageKey, JSON.stringify(data));
   }
 
   loadState() {
-    const cookieValue = Cookie.get(this.cookieName);
-    if (!cookieValue) return;
+    const storedValue = localStorage.getItem(this.storageKey);
+    if (!storedValue) return;
 
     try {
-      const data = JSON.parse(cookieValue);
+      const data = JSON.parse(storedValue);
       const today = this.getTodayDateString();
       const currentWeek = this.getWeekKey();
 
@@ -287,7 +286,7 @@ class DailyTaskTracker extends Widget {
         }
       });
     } catch (e) {
-      console.error('Failed to parse task cookie state:', e);
+      console.error('Failed to parse task localStorage state:', e);
     }
   }
 }

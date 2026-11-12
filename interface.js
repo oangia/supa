@@ -281,6 +281,7 @@ let filePreviewManager = null;
 
 // ---------- Init ----------
 window.addEventListener('DOMContentLoaded', () => {
+  // Load Supabase credentials
   const savedUrl = localStorage.getItem('sb_url');
   const savedKey = localStorage.getItem('sb_key');
   const savedBucket = localStorage.getItem('sb_bucket') || 'files';
@@ -288,6 +289,25 @@ window.addEventListener('DOMContentLoaded', () => {
   if (savedUrl) document.getElementById('settingUrlInput').value = savedUrl;
   if (savedKey) document.getElementById('settingApiKeyInput').value = savedKey;
   document.getElementById('settingBucketInput').value = savedBucket;
+
+  // Load Firebase credentials
+  const savedFbApiKey = localStorage.getItem('fb_apikey');
+  const savedFbAppId = localStorage.getItem('fb_appid');
+  const savedFbProjectId = localStorage.getItem('fb_projectid');
+  const savedFbBucket = localStorage.getItem('fb_bucket');
+
+  if (savedFbApiKey && document.getElementById('settingFirebaseApiKeyInput')) {
+    document.getElementById('settingFirebaseApiKeyInput').value = savedFbApiKey;
+  }
+  if (savedFbAppId && document.getElementById('settingFirebaseAppIdInput')) {
+    document.getElementById('settingFirebaseAppIdInput').value = savedFbAppId;
+  }
+  if (savedFbProjectId && document.getElementById('settingFirebaseProjectIdInput')) {
+    document.getElementById('settingFirebaseProjectIdInput').value = savedFbProjectId;
+  }
+  if (savedFbBucket && document.getElementById('settingFirebaseBucketInput')) {
+    document.getElementById('settingFirebaseBucketInput').value = savedFbBucket;
+  }
 
   filePreviewManager = new FilePreviewManager({
     bucket: currentBucket,

@@ -137,7 +137,7 @@ class FilePreviewManager {
 let supabaseClient = null;
 let currentBucket = 'files';
 let currentPath = '';
-let folderHistory = [{ path: '', name: 'Root' }];
+let folderHistory = [{ path: '', name: 'root' }];
 let allItems = [];
 let filteredItems = [];
 let filePreviewManager = null;
@@ -210,7 +210,7 @@ function initSupabase(url, key, bucket) {
 
     document.getElementById('headerUrl').textContent = url + '  •  bucket: ' + bucket;
     currentPath = '';
-    folderHistory = [{ path: '', name: 'Root' }];
+    folderHistory = [{ path: '', name: 'root' }];
     listFiles();
   } catch (err) {
     console.error(err);
@@ -352,7 +352,9 @@ function renderView() {
 
 function renderBreadcrumbs() {
   const nav = document.getElementById('breadcrumbNav');
+  if (!nav) return;
   nav.innerHTML = '';
+  
   folderHistory.forEach((crumb, idx) => {
     const isLast = idx === folderHistory.length - 1;
     const btn = document.createElement('button');
@@ -360,6 +362,7 @@ function renderBreadcrumbs() {
     btn.textContent = crumb.name;
     btn.onclick = () => jumpToBreadcrumb(idx);
     nav.appendChild(btn);
+    
     if (!isLast) {
       const sep = document.createElement('span');
       sep.className = "text-slate-300 mx-1";
@@ -375,6 +378,7 @@ function handleSearch() {
 
 // ---------- Navigation ----------
 function navigateToFolder(path, name) {
+  if (currentPath === path) return;
   currentPath = path;
   folderHistory.push({ path, name });
   listFiles();
@@ -508,7 +512,6 @@ async function downloadFile(path, name) {
 
     if (error) throw error;
 
-    // Force fresh download
     const res = await fetch(data.signedUrl, { cache: 'no-store' });
     if (!res.ok) throw new Error('Download failed');
     const blob = await res.blob();
@@ -552,7 +555,6 @@ async function openFileDetails(path, name) {
   modal.classList.remove('hidden');
 
   try {
-    // 1. Get signed URL
     const { data, error } = await supabaseClient
       .storage
       .from(currentBucket)
@@ -560,22 +562,16 @@ async function openFileDetails(path, name) {
 
     if (error) throw error;
 
-    // 2. Fetch binary content to calculate content hash
     const res = await fetch(data.signedUrl, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to retrieve file binary content for hashing.');
     const arrayBuffer = await res.arrayBuffer();
 
-    // 3. Compute Hashes & Track Exact Raw Strings
     const rawPathString = path; 
     const pathHash = await computeSha256(rawPathString);
-    
     const contentHash = await computeSha256(arrayBuffer);
-    
-    // Exact string combination used for the final hash
     const rawCombinedString = pathHash + contentHash;
     const combinedHash = await computeSha256(rawCombinedString);
 
-    // 4. Render Details, Raw Strings & Hashes
     body.innerHTML = `
       <div class="space-y-4">
         <div>
@@ -590,7 +586,6 @@ async function openFileDetails(path, name) {
         <hr class="border-slate-100">
 
         <div class="space-y-4">
-          <!-- 1. Path Hash Block -->
           <div class="space-y-1.5">
             <div class="flex justify-between items-center">
               <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
@@ -602,7 +597,6 @@ async function openFileDetails(path, name) {
             </div>
           </div>
 
-          <!-- 2. Content Hash Block -->
           <div class="space-y-1.5">
             <div class="flex justify-between items-center">
               <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
@@ -614,7 +608,6 @@ async function openFileDetails(path, name) {
             </div>
           </div>
 
-          <!-- 3. Combined Hash Block -->
           <div class="space-y-1.5">
             <div class="flex justify-between items-center">
               <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash (Path Hash + Content Hash)</span>

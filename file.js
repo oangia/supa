@@ -504,21 +504,22 @@ async function openFileDetails(path, name) {
     if (!res.ok) throw new Error('Failed to retrieve file binary content for hashing.');
     const arrayBuffer = await res.arrayBuffer();
 
-    // 3. Compute Hashes using Web Crypto API
-    const pathHash = await computeSha256(path);
+    // 3. Compute Hashes & Track Exact Raw Strings
+    const rawPathString = path; 
+    const pathHash = await computeSha256(rawPathString);
+    
     const contentHash = await computeSha256(arrayBuffer);
-    const combinedHash = await computeSha256(pathHash + contentHash);
+    
+    // Exact string combination used for the final hash
+    const rawCombinedString = pathHash + contentHash;
+    const combinedHash = await computeSha256(rawCombinedString);
 
-    // 4. Render Details & Hashes
+    // 4. Render Details, Raw Strings & Hashes
     body.innerHTML = `
       <div class="space-y-4">
         <div>
           <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">File Name</span>
           <p class="text-slate-800 font-medium break-all">${escapeHtml(name)}</p>
-        </div>
-        <div>
-          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Storage Path</span>
-          <p class="text-slate-800 font-mono text-xs bg-slate-50 p-2 rounded border border-slate-100 break-all">${escapeHtml(path)}</p>
         </div>
         <div>
           <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">File Size</span>
@@ -527,29 +528,42 @@ async function openFileDetails(path, name) {
         
         <hr class="border-slate-100">
 
-        <div class="space-y-3">
-          <div>
-            <div class="flex justify-between items-center mb-1">
-              <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash (SHA-256)</span>
-              <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+        <div class="space-y-4">
+          <!-- 1. Path Hash Block -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
+              <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
             </div>
-            <div class="font-mono text-[11px] bg-slate-900 text-slate-200 p-2.5 rounded-lg break-all select-all">${pathHash}</div>
+            <div>
+              <span class="text-[11px] text-slate-400 block mb-0.5">Exact string hashed: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">${escapeHtml(rawPathString)}</code></span>
+              <div class="font-mono text-[11px] bg-slate-900 text-slate-200 p-2.5 rounded-lg break-all select-all">${pathHash}</div>
+            </div>
           </div>
 
-          <div>
-            <div class="flex justify-between items-center mb-1">
-              <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash (SHA-256)</span>
-              <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+          <!-- 2. Content Hash Block -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
+              <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
             </div>
-            <div class="font-mono text-[11px] bg-slate-900 text-slate-200 p-2.5 rounded-lg break-all select-all">${contentHash}</div>
+            <div>
+              <span class="text-[11px] text-slate-400 block mb-0.5">Hashed input: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">ArrayBuffer (${arrayBuffer.byteLength} bytes)</code></span>
+              <div class="font-mono text-[11px] bg-slate-900 text-slate-200 p-2.5 rounded-lg break-all select-all">${contentHash}</div>
+            </div>
           </div>
 
-          <div>
-            <div class="flex justify-between items-center mb-1">
-              <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash (Path + Content)</span>
-              <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+          <!-- 3. Combined Hash Block -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash (Path Hash + Content Hash)</span>
+              <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
             </div>
-            <div class="font-mono text-[11px] bg-slate-900 text-emerald-400 p-2.5 rounded-lg break-all select-all">${combinedHash}</div>
+            <div>
+              <span class="text-[11px] text-slate-400 block mb-0.5">Exact concatenated string hashed:</span>
+              <div class="font-mono text-[10px] bg-slate-100 text-slate-700 p-2 rounded border border-slate-200 break-all select-all max-h-16 overflow-y-auto mb-1">${escapeHtml(rawCombinedString)}</div>
+              <div class="font-mono text-[11px] bg-slate-900 text-emerald-400 p-2.5 rounded-lg break-all select-all">${combinedHash}</div>
+            </div>
           </div>
         </div>
       </div>

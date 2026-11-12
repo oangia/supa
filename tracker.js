@@ -1,57 +1,4 @@
-class Widget {
-  constructor(options = {}) {
-    this.id = options.id || Math.random().toString(36).substring(2, 9);
-    this.popup = document.createElement('div');
-    this.popup.id = this.id;
-    this._createMenuLayout();
-    this._addFloatButton(options.floatBtn.icon, options.floatBtn.bg);
-    this._bindToggle();
-  }
-
-  _createMenuLayout() {
-    let container = document.getElementById('floating-widgets-container');
-    if (!container) {
-      container = document.createElement('div');
-      container.id = 'floating-widgets-container';
-      container.className = 'fixed bottom-6 right-6 flex flex-col items-end gap-3 z-50 font-sans';
-      document.body.appendChild(container);
-    }
-    this.widgetContainer = container;
-
-    this.wrapper = document.createElement('div');
-    this.wrapper.className = 'relative flex flex-col items-end';
-    this.widgetContainer.appendChild(this.wrapper);
-  }
-
-  _addFloatButton(icon, bgClasses = 'bg-rose-600 hover:bg-rose-700') {
-    this.floatBtn = document.createElement('button');
-    this.floatBtn.type = 'button';
-    this.floatBtn.className = `w-14 h-14 ${bgClasses} text-white rounded-full flex items-center justify-center shadow-xl cursor-pointer transition-all duration-200 hover:scale-105`;
-    this.floatBtn.innerHTML = `<i class="${icon} text-2xl"></i>`;
-    this.wrapper.appendChild(this.floatBtn);
-  }
-
-  _bindToggle() {
-    this.floatBtn.addEventListener('click', () => {
-      if (this.popup.classList.contains('hidden')) {
-        this.popup.classList.remove('hidden');
-        this.popup.classList.add('flex');
-      } else {
-        this.popup.classList.remove('flex');
-        this.popup.classList.add('hidden');
-      }
-    });
-  
-    this.popup.addEventListener('click', (e) => {
-      const closeBtn = e.target.closest('.widget-close-btn');
-      if (!closeBtn) return;
-      this.popup.classList.remove('flex');
-      this.popup.classList.add('hidden');
-    });
-  }
-}
-
-class DailyTaskTracker extends Widget {
+class DailyTaskTracker {
   constructor(
     tasks = {
       Basic: [
@@ -68,13 +15,7 @@ class DailyTaskTracker extends Widget {
     title = 'Tasks Tracker',
     options = {}
   ) {
-    super({
-      ...options,
-      floatBtn: {
-        icon: 'fa-solid fa-list-check',
-        bg: 'bg-emerald-600 hover:bg-emerald-700'
-      }
-    });
+    this.id = options.id || Math.random().toString(36).substring(2, 9);
     this.title = title;
     this.tasks = tasks;
     this.storageKey = 'daily_tasks_status';
@@ -103,11 +44,69 @@ class DailyTaskTracker extends Widget {
       }
     };
 
+    // Initialize popup element
+    this.popup = document.createElement('div');
+    this.popup.id = this.id;
+
+    // Run layout, button creation, and toggle binding
+    this._createMenuLayout();
+    
+    const floatBtnConfig = options.floatBtn || {
+      icon: 'fa-solid fa-list-check',
+      bg: 'bg-emerald-600 hover:bg-emerald-700'
+    };
+    this._addFloatButton(floatBtnConfig.icon, floatBtnConfig.bg);
+    
+    this._bindToggle();
+
+    // Render UI and bind tasks functionality
     this.createUI();
     this.loadState();
     this.attachEvents();
   }
+
+  _createMenuLayout() {
+    let container = document.getElementById('floating-widgets-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'floating-widgets-container';
+      container.className = 'fixed bottom-6 right-6 flex flex-col items-end gap-3 z-50 font-sans';
+      document.body.appendChild(container);
+    }
+    this.widgetContainer = container;
+
+    this.wrapper = document.createElement('div');
+    this.wrapper.className = 'relative flex flex-col items-end';
+    this.widgetContainer.appendChild(this.wrapper);
+  }
+
+  _addFloatButton(icon, bgClasses = 'bg-emerald-600 hover:bg-emerald-700') {
+    this.floatBtn = document.createElement('button');
+    this.floatBtn.type = 'button';
+    this.floatBtn.className = `w-14 h-14 ${bgClasses} text-white rounded-full flex items-center justify-center shadow-xl cursor-pointer transition-all duration-200 hover:scale-105`;
+    this.floatBtn.innerHTML = `<i class="${icon} text-2xl"></i>`;
+    this.wrapper.appendChild(this.floatBtn);
+  }
+
+  _bindToggle() {
+    this.floatBtn.addEventListener('click', () => {
+      if (this.popup.classList.contains('hidden')) {
+        this.popup.classList.remove('hidden');
+        this.popup.classList.add('flex');
+      } else {
+        this.popup.classList.remove('flex');
+        this.popup.classList.add('hidden');
+      }
+    });
   
+    this.popup.addEventListener('click', (e) => {
+      const closeBtn = e.target.closest('.widget-close-btn');
+      if (!closeBtn) return;
+      this.popup.classList.remove('flex');
+      this.popup.classList.add('hidden');
+    });
+  }
+
   createUI() {
     this.popup.className =
       'fixed inset-x-4 bottom-24 sm:absolute sm:inset-x-auto sm:bottom-20 sm:right-0 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 hidden flex-col z-50 overflow-hidden font-sans';

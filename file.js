@@ -190,6 +190,9 @@ function renderView() {
           <button onclick="openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Open" class="p-1.5 hover:text-indigo-600 rounded hover:bg-slate-100">
             <i class="fa-solid fa-eye"></i>
           </button>
+          <button onclick="openFileDetails('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="File Details & Hashes" class="p-1.5 hover:text-sky-600 rounded hover:bg-slate-100">
+            <i class="fa-solid fa-fingerprint"></i>
+          </button>
           <button onclick="downloadFile('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Download" class="p-1.5 hover:text-emerald-600 rounded hover:bg-slate-100">
             <i class="fa-solid fa-download"></i>
           </button>
@@ -459,6 +462,108 @@ async function downloadFile(path, name) {
   }
 }
 
+// ---------- Cryptographic Hashes & File Details ----------
+async function computeSha256(messageOrBuffer) {
+  const msgBuffer = typeof messageOrBuffer === 'string' 
+    ? new TextEncoder().encode(messageOrBuffer) 
+    : messageOrBuffer;
+    
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function openFileDetails(path, name) {
+  const modal = document.getElementById('modalFileDetails');
+  const body = document.getElementById('fileDetailsBody');
+  
+  if (!modal || !body) {
+    showToast('File details modal markup missing from HTML', 'error');
+    return;
+  }
+  
+  body.innerHTML = `
+    <div class="text-center py-10 space-y-3">
+      <i class="fa-solid fa-spinner fa-spin text-3xl text-indigo-600"></i>
+      <p class="text-slate-500 text-xs">Fetching file and computing cryptographic hashes...</p>
+    </div>
+  `;
+  modal.classList.remove('hidden');
+
+  try {
+    // 1. Get signed URL
+    const { data, error } = await supabaseClient
+      .storage
+      .from(currentBucket)
+      .createSignedUrl(path, 60);
+
+    if (error) throw error;
+
+    // 2. Fetch binary content to calculate content hash
+    const res = await fetch(data.signedUrl, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to retrieve file binary content for hashing.');
+    const arrayBuffer = await res.arrayBuffer();
+
+    // 3. Compute Hashes using Web Crypto API
+    const pathHash = await computeSha256(path);
+    const contentHash = await computeSha256(arrayBuffer);
+    const combinedHash = await computeSha256(pathHash + contentHash);
+
+    // 4. Render Details & Hashes
+    body.innerHTML = `
+      <div class="space-y-4">
+        <div>
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">File Name</span>
+          <p class="text-slate-800 font-medium break-all">${escapeHtml(name)}</p>
+        </div>
+        <div>
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Storage Path</span>
+          <p class="text-slate-800 font-mono text-xs bg-slate-50 p-2 rounded border border-slate-100 break-all">${escapeHtml(path)}</p>
+        </div>
+        <div>
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">File Size</span>
+          <p class="text-slate-800 font-mono text-xs">${formatBytes(arrayBuffer.byteLength)} (${arrayBuffer.byteLength} bytes)</p>
+        </div>
+        
+        <hr class="border-slate-100">
+
+        <div class="space-y-3">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash (SHA-256)</span>
+              <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+            </div>
+            <div class="font-mono text-[11px] bg-slate-900 text-slate-200 p-2.5 rounded-lg break-all select-all">${pathHash}</div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash (SHA-256)</span>
+              <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+            </div>
+            <div class="font-mono text-[11px] bg-slate-900 text-slate-200 p-2.5 rounded-lg break-all select-all">${contentHash}</div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash (Path + Content)</span>
+              <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+            </div>
+            <div class="font-mono text-[11px] bg-slate-900 text-emerald-400 p-2.5 rounded-lg break-all select-all">${combinedHash}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error(err);
+    body.innerHTML = `
+      <div class="p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-lg text-xs">
+        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Failed to compute hashes: ${escapeHtml(err.message || err)}
+      </div>
+    `;
+  }
+}
+
 // ---------- Backup (fresh downloads + content hash) ----------
 async function createBackup() {
   if (!supabaseClient) {
@@ -470,7 +575,6 @@ async function createBackup() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Backing up...</span>';
 
-  // Instantiate the manager and pipe progress events directly into your showToast system
   const backupManager = new SupabaseBackupManager(supabaseClient, currentBucket, (message, type) => {
     showToast(message, type, type === 'warning' ? 2500 : 3500);
   });

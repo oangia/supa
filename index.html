@@ -230,16 +230,38 @@
     </div>
   </div>
 
-  <!-- Preview / Editor Modal -->
+  <!-- Preview / Editor & Sidebar Modal -->
   <div id="modalPreview" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full h-[88vh] flex flex-col border border-slate-200 overflow-hidden">
+      
+      <!-- Top Bar -->
       <div class="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
         <h3 id="previewTitle" class="font-bold text-slate-900 text-sm truncate"></h3>
         <button onclick="closeModals()" class="text-slate-500 hover:text-slate-800 p-1">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
-      <div id="previewBody" class="flex-1 overflow-auto p-6 flex items-center justify-center bg-slate-100 min-h-[300px]"></div>
+
+      <!-- Content Container: Split Screen (Left: Viewer, Right: Sidebar) -->
+      <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Main Preview Area -->
+        <div id="previewBody" class="flex-1 overflow-auto p-6 flex items-center justify-center bg-slate-100"></div>
+
+        <!-- Right Sidebar for Details & Hashes -->
+        <div class="w-80 border-l border-slate-200 bg-white flex flex-col overflow-y-auto p-4 shrink-0 shadow-inner">
+          <div class="flex items-center gap-2 pb-3 mb-3 border-b border-slate-100">
+            <i class="fa-solid fa-fingerprint text-indigo-600 text-sm"></i>
+            <h4 class="font-bold text-xs text-slate-800 uppercase tracking-wider">File Details & Hashes</h4>
+          </div>
+          <div id="previewSidebarDetails" class="space-y-4 text-xs text-slate-600">
+            <!-- Dynamic Hashes injected here -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer Buttons -->
       <div class="px-5 py-3 border-t border-slate-200 bg-white flex justify-end gap-2 flex-wrap">
         <button id="previewSaveBtn" onclick="saveEditedText()" class="hidden px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg">
           <i class="fa-solid fa-floppy-disk mr-1"></i> Save
@@ -252,31 +274,10 @@
         </a>
         <button onclick="closeModals()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg">Close</button>
       </div>
-    </div>
-  </div>
-  <!-- File Details Modal -->
-<div id="modalFileDetails" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-      <h3 class="font-bold text-slate-800 flex items-center gap-2">
-        <i class="fa-solid fa-circle-info text-indigo-600"></i> File Details & Cryptographic Hashes
-      </h3>
-      <button onclick="closeModals()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition">
-        <i class="fa-solid fa-xmark text-lg"></i>
-      </button>
-    </div>
-    
-    <div id="fileDetailsBody" class="p-6 space-y-4 text-sm text-slate-600 max-h-[75vh] overflow-y-auto">
-      <!-- Dynamic Content Injected Here -->
-    </div>
 
-    <div class="flex items-center justify-end px-6 py-3.5 border-t border-slate-100 bg-slate-50/50 gap-2">
-      <button onclick="closeModals()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition">
-        Close
-      </button>
     </div>
   </div>
-</div>
+
   <script src="./backup.js"></script>
   <script src="./interface.js"></script>
 </body>

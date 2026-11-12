@@ -96,7 +96,7 @@ class FilePreviewManager {
         this.currentPreviewText = text;
         this.isTextEditor = true;
 
-        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 text-slate-100 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
+        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
         if (saveBtn) saveBtn.classList.remove('hidden');
         if (cancelBtn) cancelBtn.classList.remove('hidden');
       } else {

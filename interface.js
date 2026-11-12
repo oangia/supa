@@ -358,8 +358,15 @@ function renderBreadcrumbs() {
   folderHistory.forEach((crumb, idx) => {
     const isLast = idx === folderHistory.length - 1;
     const btn = document.createElement('button');
-    btn.className = isLast ? "font-bold text-indigo-600" : "hover:text-slate-900";
-    btn.textContent = crumb.name;
+    btn.className = (isLast ? "font-bold text-indigo-600" : "hover:text-slate-900") + " inline-flex items-center";
+    
+    // Check if the crumb name is 'root' and prepend the house icon
+    if (crumb.name.toLowerCase() === 'root') {
+      btn.innerHTML = `<i class="fa-solid fa-house mr-1 text-xs"></i><span>${escapeHtml(crumb.name)}</span>`;
+    } else {
+      btn.textContent = crumb.name;
+    }
+
     btn.onclick = () => jumpToBreadcrumb(idx);
     nav.appendChild(btn);
     

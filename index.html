@@ -155,30 +155,62 @@
     <div id="viewSettings" class="hidden flex-1 flex flex-col overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6">
       <div>
         <h2 class="text-lg font-bold text-slate-900 mb-1">Configuration</h2>
-        <p class="text-xs text-slate-500">Enter your Supabase credentials and Storage bucket name.</p>
+        <p class="text-xs text-slate-500">Enter your Supabase and Firebase credentials.</p>
       </div>
 
-      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4 max-w-xl">
-        <h3 class="font-semibold text-slate-800 text-sm">Supabase Credentials</h3>
-        
-        <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">Project URL</label>
-          <input type="text" id="settingUrlInput" placeholder="https://xxxxx.supabase.co" 
-                 class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
+        <!-- Supabase Card -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+          <h3 class="font-semibold text-slate-800 text-sm flex items-center gap-2">
+            <i class="fa-solid fa-bolt text-emerald-600"></i> Supabase Credentials
+          </h3>
+          
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Project URL</label>
+            <input type="text" id="settingUrlInput" placeholder="https://xxxxx.supabase.co" 
+                   class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Anon Public Key</label>
+            <input type="password" id="settingApiKeyInput" placeholder="eyJhbGciOiJIUzI1NiIsIn..." 
+                   class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Storage Bucket Name</label>
+            <input type="text" id="settingBucketInput" placeholder="files" value="files"
+                   class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+          </div>
         </div>
 
-        <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">Anon Public Key</label>
-          <input type="password" id="settingApiKeyInput" placeholder="eyJhbGciOiJIUzI1NiIsIn..." 
-                 class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
-        </div>
+        <!-- Firebase Card -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+          <h3 class="font-semibold text-slate-800 text-sm flex items-center gap-2">
+            <i class="fa-solid fa-fire text-amber-500"></i> Firebase Credentials
+          </h3>
 
-        <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">Storage Bucket Name</label>
-          <input type="text" id="settingBucketInput" placeholder="files" value="files"
-                 class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
-        </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Firebase API Key (<code class="text-[11px] text-indigo-600">apiKey</code>)</label>
+            <input type="password" id="settingFirebaseApiKeyInput" placeholder="AIzaSy..." 
+                   class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+          </div>
 
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Project ID (<code class="text-[11px] text-indigo-600">projectId</code>)</label>
+            <input type="text" id="settingFirebaseProjectIdInput" placeholder="my-firebase-project" 
+                   class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Storage Bucket (<code class="text-[11px] text-indigo-600">storageBucket</code>)</label>
+            <input type="text" id="settingFirebaseBucketInput" placeholder="my-firebase-project.appspot.com" 
+                   class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+          </div>
+        </div>
+      </div>
+
+      <div>
         <button onclick="saveSettings()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition">
           Save & Connect
         </button>

@@ -1,6 +1,6 @@
 /**
  * Dedicated FilePreviewManager class to handle file previews, 
- * media rendering, text editing, and on-demand cryptographic hashes.
+ * media rendering, text editing, and true on-demand lazy hashing.
  */
 class FilePreviewManager {
   constructor(options = {}) {
@@ -13,6 +13,8 @@ class FilePreviewManager {
     this.currentPreviewText = null;
     this.isTextEditor = false;
     this.currentArrayBuffer = null;
+    this.cachedContentHash = null;
+    this.fileSize = 0;
 
     // Callbacks
     this.onToast = options.onToast || ((msg, type) => showToast(msg, type));
@@ -24,7 +26,7 @@ class FilePreviewManager {
     if (bucket) this.bucket = bucket;
   }
 
-  async openPreview(path, name) {
+  async openPreview(path, name, fileSize = 0) {
     if (!this.supabaseClient) {
       this.onToast('Supabase client not initialized', 'error');
       return;
@@ -41,6 +43,8 @@ class FilePreviewManager {
     this.currentPreviewName = name;
     this.currentPreviewText = null;
     this.currentArrayBuffer = null;
+    this.cachedContentHash = null;
+    this.fileSize = fileSize;
     this.isTextEditor = false;
 
     if (saveBtn) saveBtn.classList.add('hidden');
@@ -53,7 +57,7 @@ class FilePreviewManager {
       sidebarDetails.innerHTML = `
         <div class="text-center py-10 space-y-2 text-slate-400">
           <i class="fa-solid fa-spinner fa-spin text-xl text-indigo-600"></i>
-          <p class="text-xs">Loading file info...</p>
+          <p class="text-xs">Loading info...</p>
         </div>
       `;
     }
@@ -75,12 +79,7 @@ class FilePreviewManager {
         downloadBtn.download = name;
       }
 
-      // Fetch binary content for rendering & lazy hashing
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error('Failed to fetch file content');
-      this.currentArrayBuffer = await res.arrayBuffer();
-
-      // Render main preview area depending on file type
+      // Render preview based on file type without heavy binary downloads (except text for editing)
       if (isImage(name)) {
         body.innerHTML = `<img src="${url}" alt="${escapeHtml(name)}" class="max-w-full max-h-[70vh] rounded-lg shadow-md object-contain">`;
       } else if (isAudio(name)) {
@@ -92,11 +91,14 @@ class FilePreviewManager {
       } else if (isVideo(name)) {
         body.innerHTML = `<video controls class="max-w-full max-h-[70vh] rounded-lg shadow-md" src="${url}"></video>`;
       } else if (isText(name)) {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Failed to fetch file content');
+        this.currentArrayBuffer = await res.arrayBuffer();
         const text = new TextDecoder().decode(this.currentArrayBuffer);
         this.currentPreviewText = text;
         this.isTextEditor = true;
 
-        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
+        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 text-slate-100 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
         if (saveBtn) saveBtn.classList.remove('hidden');
         if (cancelBtn) cancelBtn.classList.remove('hidden');
       } else {
@@ -107,8 +109,8 @@ class FilePreviewManager {
           </div>`;
       }
 
-      // Render sidebar with lightweight details and lazy hash buttons
-      await this.renderSidebarLazy(path, name, this.currentArrayBuffer);
+      // Render sidebar immediately with instant path hash (no file download required)
+      await this.renderSidebarLazy(path, name, fileSize);
 
     } catch (err) {
       this.onToast(err.message || 'Failed to load file', 'error');
@@ -118,11 +120,10 @@ class FilePreviewManager {
     }
   }
 
-  async renderSidebarLazy(path, name, arrayBuffer) {
+  async renderSidebarLazy(path, name, fileSize) {
     const sidebarDetails = document.getElementById('previewSidebarDetails');
     if (!sidebarDetails) return;
 
-    // Instantly compute lightweight Path Hash
     const pathHash = await computeSha256(path);
 
     sidebarDetails.innerHTML = `
@@ -133,12 +134,12 @@ class FilePreviewManager {
         </div>
         <div>
           <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">File Size</span>
-          <p class="text-slate-800 font-mono text-xs">${formatBytes(arrayBuffer.byteLength)} (${arrayBuffer.byteLength} bytes)</p>
+          <p class="text-slate-800 font-mono text-xs">${fileSize ? formatBytes(fileSize) + ` (${fileSize} bytes)` : 'Unknown'}</p>
         </div>
 
         <hr class="border-slate-100">
 
-        <!-- 1. Path Hash (Pre-calculated) -->
+        <!-- 1. Path Hash (Instant) -->
         <div class="space-y-1.5">
           <div class="flex justify-between items-center">
             <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
@@ -150,20 +151,20 @@ class FilePreviewManager {
           </div>
         </div>
 
-        <!-- 2. Content Hash (Lazy) -->
+        <!-- 2. Content Hash (Uncalculated / Lazy) -->
         <div class="space-y-1.5" id="contentHashContainer">
           <div class="flex justify-between items-center">
             <span class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
           </div>
           <div>
-            <span class="text-[10px] text-slate-400 block mb-1">Hashed input: ArrayBuffer (${arrayBuffer.byteLength} bytes)</span>
+            <span class="text-[10px] text-slate-400 block mb-1">Uncalculated</span>
             <button onclick="filePreviewManager.computeContentHash()" class="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs transition border border-indigo-200 flex items-center justify-center gap-1.5">
               <i class="fa-solid fa-fingerprint"></i> Calculate Content Hash
             </button>
           </div>
         </div>
 
-        <!-- 3. Combined Hash (Lazy) -->
+        <!-- 3. Combined Hash (Uncalculated / Lazy) -->
         <div class="space-y-1.5" id="combinedHashContainer">
           <div class="flex justify-between items-center">
             <span class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash</span>
@@ -181,15 +182,28 @@ class FilePreviewManager {
 
   async computeContentHash() {
     const container = document.getElementById('contentHashContainer');
-    if (!container || !this.currentArrayBuffer) return;
+    if (!container || !this.currentPreviewPath) return;
 
     container.innerHTML = `
       <div class="flex items-center justify-center py-3 text-slate-400 text-xs gap-2">
-        <i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> Computing content hash...
+        <i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> Fetching file & computing content hash...
       </div>
     `;
 
     try {
+      if (!this.currentArrayBuffer) {
+        const { data, error } = await this.supabaseClient
+          .storage
+          .from(this.bucket)
+          .createSignedUrl(this.currentPreviewPath, 60);
+
+        if (error) throw error;
+
+        const res = await fetch(data.signedUrl, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Failed to fetch file content');
+        this.currentArrayBuffer = await res.arrayBuffer();
+      }
+
       const contentHash = await computeSha256(this.currentArrayBuffer);
       this.cachedContentHash = contentHash;
 
@@ -210,7 +224,7 @@ class FilePreviewManager {
 
   async computeCombinedHash() {
     const container = document.getElementById('combinedHashContainer');
-    if (!container || !this.currentPreviewPath || !this.currentArrayBuffer) return;
+    if (!container || !this.currentPreviewPath) return;
 
     container.innerHTML = `
       <div class="flex items-center justify-center py-3 text-slate-400 text-xs gap-2">
@@ -220,10 +234,24 @@ class FilePreviewManager {
 
     try {
       const pathHash = await computeSha256(this.currentPreviewPath);
-      const contentHash = this.cachedContentHash || await computeSha256(this.currentArrayBuffer);
-      this.cachedContentHash = contentHash;
+      
+      // Ensure content hash is computed first if not already done
+      if (!this.cachedContentHash) {
+        if (!this.currentArrayBuffer) {
+          const { data, error } = await this.supabaseClient
+            .storage
+            .from(this.bucket)
+            .createSignedUrl(this.currentPreviewPath, 60);
 
-      const rawCombinedString = pathHash + contentHash;
+          if (error) throw error;
+          const res = await fetch(data.signedUrl, { cache: 'no-store' });
+          if (!res.ok) throw new Error('Failed to fetch file content');
+          this.currentArrayBuffer = await res.arrayBuffer();
+        }
+        this.cachedContentHash = await computeSha256(this.currentArrayBuffer);
+      }
+
+      const rawCombinedString = pathHash + this.cachedContentHash;
       const combinedHash = await computeSha256(rawCombinedString);
 
       container.innerHTML = `
@@ -272,9 +300,9 @@ class FilePreviewManager {
 
       this.currentPreviewText = newContent;
       this.currentArrayBuffer = await blob.arrayBuffer();
-      this.cachedContentHash = null; // Invalidate cached hash on save
+      this.cachedContentHash = null; // Invalidate cache on save
       
-      await this.renderSidebarLazy(this.currentPreviewPath, this.currentPreviewName, this.currentArrayBuffer);
+      await this.renderSidebarLazy(this.currentPreviewPath, this.currentPreviewName, this.currentArrayBuffer.byteLength);
 
       this.onToast('File saved successfully', 'success');
       this.onSaveSuccess();

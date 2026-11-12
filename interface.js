@@ -410,8 +410,11 @@ function renderView() {
       <td class="py-2.5 px-4 text-slate-500 font-mono">${updated}</td>
       <td class="py-2.5 px-4 text-right space-x-1">
         ${!isFolder ? `
-          <button onclick="openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Open Preview & Details" class="p-1.5 hover:text-indigo-600 rounded hover:bg-slate-100">
+          <button onclick="openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Open" class="p-1.5 hover:text-indigo-600 rounded hover:bg-slate-100">
             <i class="fa-solid fa-eye"></i>
+          </button>
+          <button onclick="openFileDetails('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="File Details & Hashes" class="p-1.5 hover:text-sky-600 rounded hover:bg-slate-100">
+            <i class="fa-solid fa-fingerprint"></i>
           </button>
           <button onclick="downloadFile('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Download" class="p-1.5 hover:text-emerald-600 rounded hover:bg-slate-100">
             <i class="fa-solid fa-download"></i>
@@ -436,6 +439,7 @@ function renderBreadcrumbs() {
     const btn = document.createElement('button');
     btn.className = (isLast ? "font-bold text-indigo-600" : "hover:text-slate-900") + " inline-flex items-center";
     
+    // Check if the crumb name is 'root' and prepend the house icon
     if (crumb.name.toLowerCase() === 'root') {
       btn.innerHTML = `<i class="fa-solid fa-house mr-1 text-xs"></i><span>${escapeHtml(crumb.name)}</span>`;
     } else {
@@ -608,7 +612,7 @@ async function downloadFile(path, name) {
   }
 }
 
-// ---------- Cryptographic Hashes Helper ----------
+// ---------- Cryptographic Hashes & File Details ----------
 async function computeSha256(messageOrBuffer) {
   const msgBuffer = typeof messageOrBuffer === 'string' 
     ? new TextEncoder().encode(messageOrBuffer) 
@@ -617,6 +621,11 @@ async function computeSha256(messageOrBuffer) {
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Aliased to openPreview so clicking the details button also triggers the split preview/sidebar view
+async function openFileDetails(path, name) {
+  await openPreview(path, name);
 }
 
 // ---------- Backup ----------

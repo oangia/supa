@@ -9,10 +9,10 @@
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 </head>
-<body class="bg-slate-100 min-h-screen flex flex-col items-center justify-start py-10 px-4 font-sans text-slate-800">
+<body class="bg-slate-50 min-h-screen w-full m-0 p-0 font-sans text-slate-800 flex flex-col">
 
-  <!-- Main Page Container -->
-  <main id="task-tracker-app" class="w-full max-w-2xl"></main>
+  <!-- Full-Screen App Mount -->
+  <div id="task-tracker-app" class="w-full min-h-screen flex flex-col flex-grow"></div>
 
   <script>
     class DailyTaskTracker {
@@ -64,20 +64,21 @@
 
         this.root = document.querySelector(this.mountSelector) || document.body;
 
-        // Render UI and bind tasks functionality directly on page
+        // Render UI and bind tasks functionality full screen
         this.createUI();
         this.loadState();
         this.attachEvents();
       }
 
       createUI() {
-        this.card = document.createElement('div');
-        this.card.id = this.id;
-        this.card.className = 'w-full bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden';
+        this.wrapper = document.createElement('div');
+        this.wrapper.id = this.id;
+        this.wrapper.className = 'w-full min-h-screen flex flex-col bg-slate-50';
 
-        const header = document.createElement('div');
-        header.className = 'bg-slate-900 text-white px-6 py-5 flex flex-wrap justify-between items-center gap-3';
-        
+        // Full-width top header bar
+        const header = document.createElement('header');
+        header.className = 'w-full bg-slate-900 text-white px-6 sm:px-10 py-5 flex flex-wrap justify-between items-center gap-4 shadow-md sticky top-0 z-10';
+
         const todayFormatted = new Date().toLocaleDateString(undefined, {
           weekday: 'long',
           year: 'numeric',
@@ -86,34 +87,50 @@
         });
 
         header.innerHTML = `
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <i class="fa-solid fa-list-check text-lg"></i>
+          <div class="flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <i class="fa-solid fa-list-check text-xl"></i>
             </div>
             <div>
-              <h1 class="text-lg font-bold tracking-tight">${this.title}</h1>
-              <p class="text-xs text-slate-400">${todayFormatted}</p>
+              <h1 class="text-xl font-bold tracking-tight">${this.title}</h1>
+              <p class="text-xs text-slate-400 mt-0.5">${todayFormatted}</p>
             </div>
           </div>
-          <div id="progress-badge-${this.id}" class="text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-            0 / 0 Completed
+          <div class="flex items-center gap-3">
+            <div id="progress-badge-${this.id}" class="text-xs sm:text-sm font-semibold px-4 py-2 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
+              0 / 0 Completed
+            </div>
           </div>
         `;
 
-        const container = document.createElement('div');
-        container.className = 'p-6 space-y-6 divide-y divide-slate-100';
+        // Full-width main workspace
+        const main = document.createElement('main');
+        main.className = 'w-full flex-grow px-6 sm:px-10 py-8';
+
+        const containerDiv = document.createElement('div');
+        containerDiv.className = 'w-full max-w-4xl mx-auto space-y-6';
 
         let taskIndex = 0;
-        Object.entries(this.tasks).forEach(([section, taskList], idx) => {
-          const sectionDiv = document.createElement('div');
-          sectionDiv.className = idx > 0 ? 'pt-6' : '';
+        Object.entries(this.tasks).forEach(([section, taskList]) => {
+          const sectionCard = document.createElement('section');
+          sectionCard.className = 'w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-6';
+
+          const sectionHeader = document.createElement('div');
+          sectionHeader.className = 'flex items-center justify-between border-b border-slate-100 pb-3 mb-4';
 
           const sectionTitle = document.createElement('h2');
-          sectionTitle.className = 'text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 px-1';
+          sectionTitle.className = 'text-xs font-bold uppercase tracking-wider text-slate-500';
           sectionTitle.textContent = section;
 
+          const sectionCount = document.createElement('span');
+          sectionCount.className = 'text-xs font-medium text-slate-400';
+          sectionCount.textContent = `${taskList.length} ${taskList.length === 1 ? 'task' : 'tasks'}`;
+
+          sectionHeader.appendChild(sectionTitle);
+          sectionHeader.appendChild(sectionCount);
+
           const ul = document.createElement('ul');
-          ul.className = 'space-y-2';
+          ul.className = 'space-y-3';
 
           taskList.forEach((taskItem) => {
             const isObj = typeof taskItem === 'object' && taskItem !== null;
@@ -128,10 +145,10 @@
             const id = `task-${this.id}-${taskIndex++}`;
             const li = document.createElement('li');
 
-            li.className = `flex items-start justify-between p-3.5 rounded-xl border transition ${
+            li.className = `flex items-start justify-between p-4 rounded-xl border transition ${
               isDisabled
                 ? 'opacity-50 bg-slate-50 border-slate-100 cursor-not-allowed'
-                : 'bg-white border-slate-100 hover:border-slate-200 hover:bg-slate-50/80 cursor-pointer'
+                : 'bg-white border-slate-200/80 hover:border-slate-300 hover:bg-slate-50 cursor-pointer'
             }`;
 
             li.innerHTML = `
@@ -143,26 +160,25 @@
                   
                   <!-- Custom colored checkbox box -->
                   <div class="mt-0.5 w-5 h-5 rounded-md border-2 ${colors.border} bg-white ${colors.bg} peer-checked:border-transparent flex items-center justify-center transition flex-shrink-0 ${isDisabled ? 'opacity-50' : ''}">
-                    <svg class="w-3 h-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-3 h-3 text-white opacity-0 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
                     </svg>
                   </div>
 
                   <div class="flex flex-col flex-grow min-w-0">
-                    <span class="text-sm font-medium select-none flex items-center flex-wrap gap-2 ${
+                    <span class="text-sm sm:text-base font-medium select-none flex items-center flex-wrap gap-2 ${
                       isDisabled ? 'text-slate-400 line-through' : 'text-slate-800'
                     }">
                       <span class="break-words">${taskName}</span>
                       ${taskType === 'weekly' ? `<span class="text-[10px] px-2 py-0.5 rounded-md no-underline font-semibold ${colors.badge}">Weekly</span>` : ''}
                       ${isDisabled ? '<span class="text-[10px] text-slate-500 bg-slate-200 px-2 py-0.5 rounded-md no-underline font-normal">Disabled</span>' : ''}
                     </span>
-                    ${taskDesc ? `<span class="text-xs text-slate-500 mt-1 break-words">${taskDesc}</span>` : ''}
+                    ${taskDesc ? `<span class="text-xs sm:text-sm text-slate-500 mt-1 break-words">${taskDesc}</span>` : ''}
                   </div>
                 </label>
               </div>
             `;
 
-            // Fix SVG checkmark visibility when peer is checked
             const checkbox = li.querySelector('input[type="checkbox"]');
             const checkIcon = li.querySelector('svg');
             checkbox.addEventListener('change', () => {
@@ -173,18 +189,19 @@
             ul.appendChild(li);
           });
 
-          sectionDiv.appendChild(sectionTitle);
-          sectionDiv.appendChild(ul);
-          container.appendChild(sectionDiv);
+          sectionCard.appendChild(sectionHeader);
+          sectionCard.appendChild(ul);
+          containerDiv.appendChild(sectionCard);
         });
 
-        this.card.appendChild(header);
-        this.card.appendChild(container);
-        this.root.appendChild(this.card);
+        main.appendChild(containerDiv);
+        this.wrapper.appendChild(header);
+        this.wrapper.appendChild(main);
+        this.root.appendChild(this.wrapper);
       }
 
       updateProgress() {
-        const checkboxes = Array.from(this.card.querySelectorAll('input[type="checkbox"]:not([disabled])'));
+        const checkboxes = Array.from(this.wrapper.querySelectorAll('input[type="checkbox"]:not([disabled])'));
         const completed = checkboxes.filter((chk) => chk.checked).length;
         const badge = document.getElementById(`progress-badge-${this.id}`);
         if (badge) {
@@ -193,7 +210,7 @@
       }
 
       attachEvents() {
-        const checkboxes = this.card.querySelectorAll('input[type="checkbox"]:not([disabled])');
+        const checkboxes = this.wrapper.querySelectorAll('input[type="checkbox"]:not([disabled])');
         checkboxes.forEach((chk) => {
           chk.addEventListener('change', () => {
             this.saveState();
@@ -218,7 +235,7 @@
       }
 
       saveState() {
-        const checkboxes = this.card.querySelectorAll('input[type="checkbox"]:not([disabled])');
+        const checkboxes = this.wrapper.querySelectorAll('input[type="checkbox"]:not([disabled])');
 
         let existingData = {};
         const storedValue = localStorage.getItem(this.storageKey);
@@ -270,7 +287,7 @@
           const today = this.getTodayDateString();
           const currentWeek = this.getWeekKey();
 
-          const checkboxes = this.card.querySelectorAll('input[type="checkbox"]:not([disabled])');
+          const checkboxes = this.wrapper.querySelectorAll('input[type="checkbox"]:not([disabled])');
           checkboxes.forEach((chk) => {
             const taskName = chk.dataset.task;
             const taskType = chk.dataset.type;
@@ -304,7 +321,7 @@
         { name: 'Learn songs', type: 'daily', objective: 'useful' }
       ],
       Music: [
-        { name: 'Reading', type: 'daily', desc: "Try to understand how girls, social, the world work", objective: 'useful' },
+        { name: 'Reading', type: 'daily', desc: "Try to understand how girls, social, the world work", objective: 'yellow' },
         { name: 'Practice singing', type: 'daily', objective: 'useful' },
         { name: 'Write/sing songs', type: 'daily', desc: "Enjoy life", objective: 'useful' },
         { name: 'Social', objective: 'fun' }

@@ -1,6 +1,6 @@
 /**
  * Dedicated FilePreviewManager class to handle file previews, 
- * media rendering, and text editing.
+ * media rendering, text editing, and live cryptographic hashes.
  */
 class FilePreviewManager {
   constructor(options = {}) {
@@ -12,6 +12,7 @@ class FilePreviewManager {
     this.currentPreviewName = null;
     this.currentPreviewText = null;
     this.isTextEditor = false;
+    this.currentArrayBuffer = null;
 
     // Callbacks
     this.onToast = options.onToast || ((msg, type) => showToast(msg, type));
@@ -31,6 +32,7 @@ class FilePreviewManager {
 
     const title = document.getElementById('previewTitle');
     const body = document.getElementById('previewBody');
+    const sidebarDetails = document.getElementById('previewSidebarDetails');
     const downloadBtn = document.getElementById('previewDownloadBtn');
     const saveBtn = document.getElementById('previewSaveBtn');
     const cancelBtn = document.getElementById('previewCancelEditBtn');
@@ -38,13 +40,25 @@ class FilePreviewManager {
     this.currentPreviewPath = path;
     this.currentPreviewName = name;
     this.currentPreviewText = null;
+    this.currentArrayBuffer = null;
     this.isTextEditor = false;
 
     if (saveBtn) saveBtn.classList.add('hidden');
     if (cancelBtn) cancelBtn.classList.add('hidden');
 
     if (title) title.textContent = name;
-    if (body) body.innerHTML = '<div class="text-slate-500"><i class="fa-solid fa-spinner fa-spin text-2xl"></i></div>';
+    if (body) body.innerHTML = '<div class="text-slate-500 py-12 flex justify-center"><i class="fa-solid fa-spinner fa-spin text-2xl"></i></div>';
+    if (sidebarDetails) {
+      sidebarDetails.innerHTML = `
+        <div class="text-center py-10 space-y-2 text-slate-400">
+          <i class="fa-solid fa-spinner fa-spin text-xl text-indigo-600"></i>
+          <p class="text-xs">Computing hashes...</p>
+        </div>
+      `;
+    }
+
+    const modal = document.getElementById('modalPreview');
+    if (modal) modal.classList.remove('hidden');
 
     try {
       const { data, error } = await this.supabaseClient
@@ -60,6 +74,12 @@ class FilePreviewManager {
         downloadBtn.download = name;
       }
 
+      // Fetch binary content for rendering & hashes concurrently
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to fetch file content');
+      this.currentArrayBuffer = await res.arrayBuffer();
+
+      // Render main preview area depending on file type
       if (isImage(name)) {
         body.innerHTML = `<img src="${url}" alt="${escapeHtml(name)}" class="max-w-full max-h-[70vh] rounded-lg shadow-md object-contain">`;
       } else if (isAudio(name)) {
@@ -71,27 +91,81 @@ class FilePreviewManager {
       } else if (isVideo(name)) {
         body.innerHTML = `<video controls class="max-w-full max-h-[70vh] rounded-lg shadow-md" src="${url}"></video>`;
       } else if (isText(name)) {
-        const res = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) throw new Error('Failed to fetch file content');
-        const text = await res.text();
+        const text = new TextDecoder().decode(this.currentArrayBuffer);
         this.currentPreviewText = text;
         this.isTextEditor = true;
 
-        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
+        body.innerHTML = `<textarea id="editTextarea" class="w-full h-[65vh] font-mono text-xs p-3 bg-slate-900 text-slate-100 rounded-lg border border-slate-700">${escapeHtml(text)}</textarea>`;
         if (saveBtn) saveBtn.classList.remove('hidden');
         if (cancelBtn) cancelBtn.classList.remove('hidden');
       } else {
         body.innerHTML = `
-          <div class="text-center space-y-4">
+          <div class="text-center space-y-4 py-12">
             <i class="fa-solid fa-file text-5xl text-slate-400"></i>
             <p class="text-sm text-slate-600">Preview not available for this file type.</p>
           </div>`;
       }
 
-      const modal = document.getElementById('modalPreview');
-      if (modal) modal.classList.remove('hidden');
+      // Compute cryptographic hashes for the sidebar
+      await this.renderSidebarHashes(path, name, this.currentArrayBuffer);
+
     } catch (err) {
       this.onToast(err.message || 'Failed to load file', 'error');
+      if (sidebarDetails) {
+        sidebarDetails.innerHTML = `<div class="p-3 bg-rose-50 text-rose-700 rounded text-xs">Failed to load details</div>`;
+      }
+    }
+  }
+
+  async renderSidebarHashes(path, name, arrayBuffer) {
+    const sidebarDetails = document.getElementById('previewSidebarDetails');
+    if (!sidebarDetails) return;
+
+    try {
+      const pathHash = await computeSha256(path);
+      const contentHash = await computeSha256(arrayBuffer);
+      const rawCombinedString = pathHash + contentHash;
+      const combinedHash = await computeSha256(rawCombinedString);
+
+      sidebarDetails.innerHTML = `
+        <div class="space-y-4">
+          <div>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">File Size</span>
+            <p class="text-slate-800 font-mono text-xs">${formatBytes(arrayBuffer.byteLength)} (${arrayBuffer.byteLength} bytes)</p>
+          </div>
+
+          <hr class="border-slate-100">
+
+          <!-- 1. Path Hash -->
+          <div class="space-y-1">
+            <div class="flex justify-between items-center">
+              <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
+              <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+            </div>
+            <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${pathHash}</div>
+          </div>
+
+          <!-- 2. Content Hash -->
+          <div class="space-y-1">
+            <div class="flex justify-between items-center">
+              <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
+              <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+            </div>
+            <div class="font-mono text-[10px] bg-slate-900 text-slate-200 p-2 rounded break-all select-all">${contentHash}</div>
+          </div>
+
+          <!-- 3. Combined Hash -->
+          <div class="space-y-1">
+            <div class="flex justify-between items-center">
+              <span class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash</span>
+              <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-[11px] text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy</button>
+            </div>
+            <div class="font-mono text-[10px] bg-slate-900 text-emerald-400 p-2 rounded break-all select-all">${combinedHash}</div>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      sidebarDetails.innerHTML = `<div class="text-xs text-rose-600">Error computing hashes</div>`;
     }
   }
 
@@ -124,6 +198,11 @@ class FilePreviewManager {
       if (error) throw error;
 
       this.currentPreviewText = newContent;
+      this.currentArrayBuffer = await blob.arrayBuffer();
+      
+      // Recompute hashes for updated file content in sidebar
+      await this.renderSidebarHashes(this.currentPreviewPath, this.currentPreviewName, this.currentArrayBuffer);
+
       this.onToast('File saved successfully', 'success');
       this.onSaveSuccess();
     } catch (err) {
@@ -331,11 +410,8 @@ function renderView() {
       <td class="py-2.5 px-4 text-slate-500 font-mono">${updated}</td>
       <td class="py-2.5 px-4 text-right space-x-1">
         ${!isFolder ? `
-          <button onclick="openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Open" class="p-1.5 hover:text-indigo-600 rounded hover:bg-slate-100">
+          <button onclick="openPreview('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Open Preview & Details" class="p-1.5 hover:text-indigo-600 rounded hover:bg-slate-100">
             <i class="fa-solid fa-eye"></i>
-          </button>
-          <button onclick="openFileDetails('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="File Details & Hashes" class="p-1.5 hover:text-sky-600 rounded hover:bg-slate-100">
-            <i class="fa-solid fa-fingerprint"></i>
           </button>
           <button onclick="downloadFile('${escapeHtml(fullPath)}', '${escapeHtml(item.name)}')" title="Download" class="p-1.5 hover:text-emerald-600 rounded hover:bg-slate-100">
             <i class="fa-solid fa-download"></i>
@@ -360,7 +436,6 @@ function renderBreadcrumbs() {
     const btn = document.createElement('button');
     btn.className = (isLast ? "font-bold text-indigo-600" : "hover:text-slate-900") + " inline-flex items-center";
     
-    // Check if the crumb name is 'root' and prepend the house icon
     if (crumb.name.toLowerCase() === 'root') {
       btn.innerHTML = `<i class="fa-solid fa-house mr-1 text-xs"></i><span>${escapeHtml(crumb.name)}</span>`;
     } else {
@@ -533,7 +608,7 @@ async function downloadFile(path, name) {
   }
 }
 
-// ---------- Cryptographic Hashes & File Details ----------
+// ---------- Cryptographic Hashes Helper ----------
 async function computeSha256(messageOrBuffer) {
   const msgBuffer = typeof messageOrBuffer === 'string' 
     ? new TextEncoder().encode(messageOrBuffer) 
@@ -542,101 +617,6 @@ async function computeSha256(messageOrBuffer) {
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function openFileDetails(path, name) {
-  const modal = document.getElementById('modalFileDetails');
-  const body = document.getElementById('fileDetailsBody');
-  
-  if (!modal || !body) {
-    showToast('File details modal markup missing from HTML', 'error');
-    return;
-  }
-  
-  body.innerHTML = `
-    <div class="text-center py-10 space-y-3">
-      <i class="fa-solid fa-spinner fa-spin text-3xl text-indigo-600"></i>
-      <p class="text-slate-500 text-xs">Fetching file and computing cryptographic hashes...</p>
-    </div>
-  `;
-  modal.classList.remove('hidden');
-
-  try {
-    const { data, error } = await supabaseClient
-      .storage
-      .from(currentBucket)
-      .createSignedUrl(path, 60);
-
-    if (error) throw error;
-
-    const res = await fetch(data.signedUrl, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to retrieve file binary content for hashing.');
-    const arrayBuffer = await res.arrayBuffer();
-
-    const rawPathString = path; 
-    const pathHash = await computeSha256(rawPathString);
-    const contentHash = await computeSha256(arrayBuffer);
-    const rawCombinedString = pathHash + contentHash;
-    const combinedHash = await computeSha256(rawCombinedString);
-
-    body.innerHTML = `
-      <div class="space-y-4">
-        <div>
-          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">File Name</span>
-          <p class="text-slate-800 font-medium break-all">${escapeHtml(name)}</p>
-        </div>
-        <div>
-          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">File Size</span>
-          <p class="text-slate-800 font-mono text-xs">${formatBytes(arrayBuffer.byteLength)} (${arrayBuffer.byteLength} bytes)</p>
-        </div>
-        
-        <hr class="border-slate-100">
-
-        <div class="space-y-4">
-          <div class="space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">1. Path Hash</span>
-              <button onclick="navigator.clipboard.writeText('${pathHash}'); showToast('Path hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
-            </div>
-            <div>
-              <span class="text-[11px] text-slate-400 block mb-0.5">Exact string hashed: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">${escapeHtml(rawPathString)}</code></span>
-              <div class="font-mono text-[11px] bg-slate-900 text-slate-200 p-2.5 rounded-lg break-all select-all">${pathHash}</div>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">2. Content Hash</span>
-              <button onclick="navigator.clipboard.writeText('${contentHash}'); showToast('Content hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
-            </div>
-            <div>
-              <span class="text-[11px] text-slate-400 block mb-0.5">Hashed input: <code class="bg-slate-100 text-slate-700 px-1 py-0.5 rounded">ArrayBuffer (${arrayBuffer.byteLength} bytes)</code></span>
-              <div class="font-mono text-[11px] bg-slate-900 text-slate-200 p-2.5 rounded-lg break-all select-all">${contentHash}</div>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <div class="flex justify-between items-center">
-              <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">3. Combined Hash (Path Hash + Content Hash)</span>
-              <button onclick="navigator.clipboard.writeText('${combinedHash}'); showToast('Combined hash copied', 'success', 1500);" class="text-xs text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i> Copy Hash</button>
-            </div>
-            <div>
-              <span class="text-[11px] text-slate-400 block mb-0.5">Exact concatenated string hashed:</span>
-              <div class="font-mono text-[10px] bg-slate-100 text-slate-700 p-2 rounded border border-slate-200 break-all select-all max-h-16 overflow-y-auto mb-1">${escapeHtml(rawCombinedString)}</div>
-              <div class="font-mono text-[11px] bg-slate-900 text-emerald-400 p-2.5 rounded-lg break-all select-all">${combinedHash}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  } catch (err) {
-    console.error(err);
-    body.innerHTML = `
-      <div class="p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-lg text-xs">
-        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Failed to compute hashes: ${escapeHtml(err.message || err)}
-      </div>
-    `;
-  }
 }
 
 // ---------- Backup ----------
